@@ -3,6 +3,7 @@
 # Local environments / caches
 .venv/
 .vite/
+node_modules/
 tools/__pycache__/
 *.pyc
 

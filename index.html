@@ -3,100 +3,98 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Manga Match!</title>
+    <title>One Stroke | Hamiltonian Path Puzzle</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Bangers&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;700&family=Sora:wght@600;700&display=swap"
       rel="stylesheet"
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="bg-halo halo-a"></div>
-    <div class="bg-halo halo-b"></div>
+    <div class="ambient-blur blur-a"></div>
+    <div class="ambient-blur blur-b"></div>
 
-    <main class="game-shell">
-      <section class="hud-panel">
-        <h1>Manga Match!</h1>
-        <p class="tagline">Combo panels. Anime energy.</p>
+    <main class="app-shell">
+      <aside class="panel sidebar">
+        <header class="headline">
+          <p class="eyebrow">Hamiltonian Path Puzzle</p>
+          <h1>One Stroke</h1>
+          <p class="subtitle">
+            Besök varje spelbar nod exakt en gång i en enda sammanhängande väg.
+          </p>
+        </header>
 
-        <div class="stat-grid">
+        <section class="stats" aria-label="Spelstatus">
           <article class="stat-card">
-            <span class="label">Score</span>
-            <strong id="score">0</strong>
+            <span class="label">Nivå</span>
+            <strong id="levelLabel">1 / 1</strong>
           </article>
           <article class="stat-card">
-            <span class="label">Bana</span>
-            <strong id="level">1 / 10</strong>
+            <span class="label">Besökta</span>
+            <strong id="visitedLabel">1</strong>
           </article>
           <article class="stat-card">
-            <span class="label">Drag kvar</span>
-            <strong id="moves">25</strong>
+            <span class="label">Kvar</span>
+            <strong id="remainingLabel">0</strong>
           </article>
           <article class="stat-card">
-            <span class="label">Combo</span>
-            <strong id="combo">x1.0</strong>
+            <span class="label">Status</span>
+            <strong id="phaseLabel">Spelar</strong>
           </article>
+        </section>
+
+        <div id="statusBox" class="status-box" role="status" aria-live="polite">
+          Dra från startnoden till en granne för att börja.
         </div>
 
-        <section class="fever-panel" aria-label="Fever mode">
-          <div class="fever-head">
-            <span class="label">Fever</span>
-            <strong id="feverState">Laddar</strong>
-          </div>
-          <div id="feverMeter" class="fever-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="feverFill" class="fever-fill"></div>
-          </div>
-          <div class="fever-meta">
-            <span id="feverPercent">0%</span>
-            <span id="feverTurns">Bygg kedjor</span>
-          </div>
-        </section>
-
-        <section id="dailyPanel" class="daily-panel" aria-label="Daglig utmaning">
-          <div class="daily-head">
-            <span class="label">Daglig utmaning</span>
-            <strong id="dailyStreak">Streak 0</strong>
-          </div>
-          <p id="dailyTask" class="daily-task">Laddar utmaning...</p>
-          <div id="dailyProgress" class="daily-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="dailyFill" class="daily-fill"></div>
-          </div>
-          <div class="daily-meta">
-            <span id="dailyCount">0/0</span>
-            <span id="dailyReward">Belöning väntar</span>
-          </div>
-        </section>
-
-        <section class="goals-panel" aria-label="Banmål">
-          <h2>Mål</h2>
-          <ul id="goalsList" class="goal-list"></ul>
-        </section>
-
-        <div id="status" class="status-box">Byt två brickor för att starta.</div>
-
-        <div class="controls">
-          <button id="restartBtn" type="button">Ny match</button>
-          <button id="nextBtn" type="button">Nästa bana</button>
-          <button id="shuffleBtn" type="button">Blanda</button>
+        <div class="button-row">
+          <button id="undoBtn" type="button">Ångra</button>
+          <button id="resetBtn" type="button">Starta om</button>
+          <button id="nextBtn" type="button" class="primary">Nästa nivå</button>
         </div>
 
-        <p class="rules">
-          Matcha 3+ i rad. <span>4</span> skapar linjeattack, <span>5</span> skapar färgbomb,
-          <span>T/L</span>-korsning skapar bomb.
-        </p>
-      </section>
+        <section class="panel-inset">
+          <h2>Regler</h2>
+          <p>Fri slutnod. Ingen specifik målcell krävs.</p>
+          <p>Endast ortogonala steg.</p>
+          <p>Strikt undo via Ångra.</p>
+        </section>
 
-      <section class="board-panel">
-        <div class="manga-strip top"></div>
-        <div class="sfx-tag" aria-hidden="true">KIRA!</div>
-        <div id="board" class="board" aria-label="Spelbräde"></div>
-        <div id="fxLayer" class="fx-layer" aria-hidden="true"></div>
-        <div id="comboBurst" class="combo-burst" aria-hidden="true"></div>
-        <div class="manga-strip bottom"></div>
+        <section class="panel-inset">
+          <h2>Nivåer</h2>
+          <div id="levelList" class="level-list" role="list"></div>
+        </section>
+      </aside>
+
+      <section class="panel board-panel">
+        <div class="board-head">
+          <div>
+            <p class="eyebrow">Desktop-first, mobilvänligt</p>
+            <h2 id="levelName">Nivå 1</h2>
+          </div>
+          <p class="board-help">Dra från senaste noden med mus eller finger.</p>
+        </div>
+        <div class="board-stage">
+          <div class="stage-corners" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+          <div id="board" class="board" aria-label="Spelplan"></div>
+        </div>
       </section>
     </main>
+
+    <div id="winModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+      <div class="modal-card">
+        <h2 id="winTitle">Bana klar</h2>
+        <p id="winText">Snyggt. Du täckte alla noder exakt en gång.</p>
+        <div class="button-row">
+          <button id="modalResetBtn" type="button">Spela om</button>
+          <button id="modalNextBtn" type="button" class="primary">Nästa nivå</button>
+        </div>
+      </div>
+    </div>
 
     <script src="game.js"></script>
   </body>
