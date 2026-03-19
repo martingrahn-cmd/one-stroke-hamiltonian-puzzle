@@ -65,15 +65,18 @@ Representera banor i JSON:
 
 ```json
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "id": "level_001",
   "name": "Intro Sweep",
+  "difficulty": "easy",
+  "campaignIndex": 1,
   "width": 5,
   "height": 5,
   "blocked": [[1,1], [3,2]],
   "start": [0,0],
   "endMode": "free",
-  "par": 14
+  "par": 14,
+  "solution": "RRDDLL..."
 }
 ```
 
@@ -81,6 +84,7 @@ Notering:
 - Koordinater är `[x, y]`
 - `endMode: "free"` betyder att spelaren får avsluta på valfri nod så länge alla noder är täckta exakt en gång
 - `par` = förväntat antal steg i optimal lösning (används för scoring/3-stjärnigt system senare)
+- `solution` = referenslösning i U/D/L/R-format för validering och framtida hint-system
 
 ## 9. UX-principer
 - Spelaren ska alltid se:
@@ -141,16 +145,18 @@ UI-principer:
 3. Vägvisualisering med riktade länkar mellan noder, inte bara färgskifte.
 
 ## 14. Status just nu
-1. Banformat v1 definierat (`formatVersion`, `endMode`).
-2. Minimalt spel-state implementerat (`level`, `path`, `visited`, `win/lose`).
-3. Första vertikala slice implementerad (spelbar bana, vinstskärm, nivåupplåsning).
-4. Nivå 3 rebalanserad för jämnare progression.
-5. Nivå 4 rebalanserad för mjukare svårighetsökning.
+1. Modulär kodstruktur i `src/` (core, data, game).
+2. Kampanj med **200 nivåer** implementerad.
+3. Svårighetsband implementerade: `easy`, `medium`, `hard`, `very-hard`.
+4. Seedad **Challenge Mix (10 banor)** implementerad med blandad svårighetsgrad.
+5. Kampanjprogress + nivåupplåsning sparas lokalt.
+6. Nivå 3 och 4 rebalanserade för jämnare tidig progression.
+7. Challenge-resultatvy med split-tider, totalpoäng och export av summary implementerad.
 
 ## 15. Föreslagna nästa steg
-1. Utöka till 10+ handgjorda banor med tydlig svårighetskurva.
-2. Lägg till statistik per bana (tid, antal undo, bäst resultat lokalt).
-3. Implementera hint-system v1 (en säker nästa nod).
+1. Lägg till global statistiköversikt (per difficulty och per challenge-run).
+2. Lägg till hint-system v1 (nästa säkra nod, med straff i score).
+3. Lägg till backend för challenge-resultat och vänjämförelse.
 
 ## 16. Skalbarhet: 200 nivåer
 Ja, 200 nivåer är fullt möjligt med rätt innehållspipeline.
@@ -162,10 +168,16 @@ Föreslagen modell:
 4. Curaterad progression: nivå 1-200 byggs från poolen med kontrollerad svårighetskurva.
 5. Säsongsrotation: nya banpaket kan ersätta delar av poolen utan att bryta kärnsystemet.
 
-Tekniska nycklar:
-1. `levels.json` (eller shardade filer per difficulty-band).
-2. Build-script som validerar + rankar svårighet + exporterar färdig nivålista.
-3. Telemetri som mäter verklig svårighet (clear rate, median tid, median undo) för framtida tuning.
+Tekniska nycklar (nuvarande implementation):
+1. Generator-script: `tools/generate_campaign_levels.mjs`
+2. Genererad datakälla: `src/data/campaign-levels.js` (200 nivåer)
+3. Integritetsvalidering via referenslösning (`solution`) innan nivåer används
+4. Seedad challenge-pool i `src/game/challenge-pool.js`
+
+Lösbarhetsgaranti:
+1. Varje nivå genereras från en explicit Hamiltonian path.
+2. Pathen sparas som referenslösning (`solution`).
+3. Integritetsvalidering säkerställer att lösningen täcker alla spelbara noder exakt en gång.
 
 ## 17. USP: Asynkront Multiplayer (Vision)
 Mål: göra One Stroke socialt och tävlingsinriktat utan krav på realtid.
@@ -194,11 +206,20 @@ Produktflöde:
 3. Efter varje klarad bana: "Du leder med X poäng" / "Du ligger Y bakom".
 4. Matchsammanfattning + delbar resultatskärm.
 
-Tekniskt (framtida, ej MVP):
-1. Matchobjekt med fast `seed` eller färdig nivålista.
+Tekniskt (nästa steg mot full async multiplayer):
+1. Matchobjekt med fast `seed` + låst nivålista.
 2. Eventlogg per bana (`start`, `finish`, `undoCount`, `resetCount`, `durationMs`).
 3. Servervalidering av resultatformat och rimlighetsgränser.
 4. Enkel anti-fuskstrategi via plausibility checks och signering av sessionsdata.
 
 Obs:
 - Detta är en planerad USP-riktning, inte implementerad i nuvarande MVP.
+
+## 18. Projektdokumentation
+For tydlighet i vardagsarbetet finns kompletterande `.md`-filer:
+1. `README.md` - projektoversikt och snabbstart.
+2. `CHANGELOG.md` - vad som har byggts och andrats.
+3. `NOW.md` - vad teamet fokuserar pa just nu.
+4. `IDEAS.md` - framtidsideer och experimentspaar.
+5. `TODO.md` - prioriterad arbetslista.
+6. `BUGS.md` - oppna buggar och buggrapportmall.

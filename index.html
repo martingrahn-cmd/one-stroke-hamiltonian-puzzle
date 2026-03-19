@@ -29,7 +29,15 @@
         <section class="stats" aria-label="Spelstatus">
           <article class="stat-card">
             <span class="label">Nivå</span>
-            <strong id="levelLabel">1 / 1</strong>
+            <strong id="levelLabel">1 / 200</strong>
+          </article>
+          <article class="stat-card">
+            <span class="label">Svårighet</span>
+            <strong id="difficultyLabel">Easy</strong>
+          </article>
+          <article class="stat-card">
+            <span class="label">Kampanj</span>
+            <strong id="campaignProgressLabel">0 klara</strong>
           </article>
           <article class="stat-card">
             <span class="label">Besökta</span>
@@ -49,6 +57,11 @@
           Dra från startnoden till en granne för att börja.
         </div>
 
+        <div class="mode-switch" role="tablist" aria-label="Spelläge">
+          <button id="campaignModeBtn" type="button" class="active">Kampanj</button>
+          <button id="challengeModeBtn" type="button">Challenge</button>
+        </div>
+
         <div class="button-row">
           <button id="undoBtn" type="button">Ångra</button>
           <button id="resetBtn" type="button">Starta om</button>
@@ -65,6 +78,45 @@
         <section class="panel-inset">
           <h2>Nivåer</h2>
           <div id="levelList" class="level-list" role="list"></div>
+        </section>
+
+        <section class="panel-inset challenge-panel">
+          <h2>Challenge Mix (10)</h2>
+          <div class="challenge-controls">
+            <input
+              id="challengeSeedInput"
+              type="text"
+              maxlength="64"
+              placeholder="seed-123"
+              aria-label="Challenge seed"
+            />
+            <button id="challengeGenerateBtn" type="button">Skapa Mix</button>
+          </div>
+          <p id="challengeMeta" class="challenge-meta">Ingen aktiv challenge.</p>
+          <div id="challengeList" class="challenge-list" role="list"></div>
+        </section>
+
+        <section class="panel-inset challenge-results-panel">
+          <h2>Challenge Resultat</h2>
+          <div class="challenge-totals">
+            <article class="mini-stat">
+              <span class="label">Poäng</span>
+              <strong id="challengeScoreLabel">0</strong>
+            </article>
+            <article class="mini-stat">
+              <span class="label">Total Tid</span>
+              <strong id="challengeTimeLabel">0:00</strong>
+            </article>
+            <article class="mini-stat">
+              <span class="label">Klara</span>
+              <strong id="challengeCompletedLabel">0 / 10</strong>
+            </article>
+          </div>
+          <div id="challengeSplitList" class="challenge-split-list" role="list"></div>
+          <div class="challenge-export-row">
+            <button id="copyChallengeSummaryBtn" type="button">Kopiera Summary</button>
+            <button id="exportChallengeSummaryBtn" type="button">Exportera JSON</button>
+          </div>
         </section>
       </aside>
 
@@ -96,6 +148,6 @@
       </div>
     </div>
 
-    <script src="game.js"></script>
+    <script type="module" src="src/main.js"></script>
   </body>
 </html>
