@@ -11,6 +11,9 @@ Alla noterbara andringar i projektet.
 - Drag-back undo: spelaren kan dra till foregaende nod for snabb angring.
 - Lokal challenge-run historik i `localStorage` (senaste 20 runs).
 - Trophy-system med 31 achievements: 15 brons, 10 silver, 5 guld, 1 platinum.
+- Global high-score statistik: tabell per svaarighetsgrad (best time, medeltid, win-rate) och challenge-run snittkort.
+- Detaljerad run-resultatvy i High-score med valbar run, PB-jamforelse och split-list.
+- Standardiserat challenge-summary schema v1 for export (JSON) och delning (text).
 
 ### Changed
 - Challenge-score tar nu hänsyn till antal hints (poängstraff per hint).
@@ -19,6 +22,9 @@ Alla noterbara andringar i projektet.
 - Drag-back visar nu ocksa lokal straff-feedback direkt pa spelplanen (flytande `+2,5s` vid noden).
 - Ny huvudmeny/hub med separata vyer: Single-player, Multiplayer, High-score, Achievement och Credit.
 - Achievement-vyn visar nu trophy-fordelning per tier och markerar status per trophy.
+- High-score-vyn visar nu fler aggregerade nyckeltal for challenge-historik (completion-rate, snittpoang, snitttid, snitt undo/hint).
+- High-score run-list ar nu interaktiv med markerad vald run och tangentbordsstod (Enter/Space).
+- Copy summary och JSON-export bygger nu pa samma payload-builder for konsekvent datamodell.
 
 ## [2026-03-19]
 

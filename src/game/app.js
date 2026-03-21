@@ -2,7 +2,7 @@ import {
   CAMPAIGN_LEVELS,
   CAMPAIGN_TOTAL_LEVELS,
 } from "../data/campaign-levels.js";
-import { DIFFICULTY_META } from "../data/difficulty.js";
+import { DIFFICULTY_META, DIFFICULTY_ORDER } from "../data/difficulty.js";
 import {
   coordKey,
   directionBetweenKeys,
@@ -35,6 +35,8 @@ const CHALLENGE_HINT_PENALTY = 180;
 const CHALLENGE_UNDO_PENALTY_SECONDS = 2.5;
 const CHALLENGE_RESET_PENALTY_SECONDS = 7;
 const CHALLENGE_HISTORY_LIMIT = 20;
+const CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
+const CHALLENGE_SUMMARY_SCHEMA_KIND = "one-stroke.challenge-summary";
 
 const TROPHY_TIER_ORDER = ["bronze", "silver", "gold", "platinum"];
 const TROPHY_TIER_META = {
@@ -284,6 +286,10 @@ function todaySeed() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function createRunId() {
+  return `run-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+}
+
 function toDisplayTime(ms) {
   if (!Number.isFinite(ms)) {
     return "--";
@@ -296,6 +302,52 @@ function toDisplayTime(ms) {
 
 function toDisplayScore(value) {
   return new Intl.NumberFormat("sv-SE").format(Math.round(value));
+}
+
+function toDisplayDecimal(value, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return new Intl.NumberFormat("sv-SE", {
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
+  }).format(value);
+}
+
+function toDisplayPercent(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  return `${toDisplayDecimal(value, 1)}%`;
+}
+
+function toMachineDecimal(value, fractionDigits = 1) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  return Number(value).toFixed(fractionDigits);
+}
+
+function toDisplaySignedScoreDelta(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  if (value === 0) {
+    return "PB";
+  }
+  const sign = value > 0 ? "+" : "-";
+  return `${sign}${toDisplayScore(Math.abs(value))} p`;
+}
+
+function toDisplaySignedTimeDelta(ms) {
+  if (!Number.isFinite(ms)) {
+    return "--";
+  }
+  if (ms === 0) {
+    return "PB";
+  }
+  const sign = ms > 0 ? "+" : "-";
+  return `${sign}${toDisplayTime(Math.abs(ms))}`;
 }
 
 function toDisplayPenaltySeconds(seconds) {
@@ -368,7 +420,15 @@ export class OneStrokeApp {
     this.highScoreBestChallengeTimeEl = document.getElementById("highScoreBestChallengeTime");
     this.highScoreCampaignSolvedEl = document.getElementById("highScoreCampaignSolved");
     this.highScoreRunCountEl = document.getElementById("highScoreRunCount");
+    this.highScoreDifficultyBodyEl = document.getElementById("highScoreDifficultyBody");
+    this.highScoreRunCompletionRateEl = document.getElementById("highScoreRunCompletionRate");
+    this.highScoreRunAverageScoreEl = document.getElementById("highScoreRunAverageScore");
+    this.highScoreRunAverageTimeEl = document.getElementById("highScoreRunAverageTime");
+    this.highScoreRunAverageCompletedEl = document.getElementById("highScoreRunAverageCompleted");
+    this.highScoreRunAverageUndoEl = document.getElementById("highScoreRunAverageUndo");
+    this.highScoreRunAverageHintEl = document.getElementById("highScoreRunAverageHint");
     this.highScoreRunListEl = document.getElementById("highScoreRunList");
+    this.highScoreRunDetailEl = document.getElementById("highScoreRunDetail");
     this.achievementSummaryEl = document.getElementById("achievementSummary");
     this.achievementListEl = document.getElementById("achievementList");
     this.challengeSeedInput = document.getElementById("challengeSeedInput");
@@ -400,6 +460,7 @@ export class OneStrokeApp {
     this.activeHintKey = null;
     this.solutionPathCache = new Map();
     this.hubView = "single-player";
+    this.selectedHighScoreRunId = null;
 
     this.progress = loadCampaignProgress(1);
     this.progress.unlockedLevel = clamp(this.progress.unlockedLevel, 1, CAMPAIGN_TOTAL_LEVELS);
@@ -417,6 +478,7 @@ export class OneStrokeApp {
     this.challengeRunHistory = loadChallengeRunHistory(CHALLENGE_HISTORY_LIMIT);
     this.achievementUnlocks = loadAchievementUnlocks();
     this.challengeRunMeta = {
+      runId: createRunId(),
       startedAtMs: Date.now(),
       saved: false,
     };
@@ -564,6 +626,7 @@ export class OneStrokeApp {
       resultsByLevelId: {},
     };
     this.challengeRunMeta = {
+      runId: createRunId(),
       startedAtMs: Date.now(),
       saved: false,
     };
@@ -701,33 +764,128 @@ export class OneStrokeApp {
     }
   }
 
-  buildChallengeShareText(summary) {
-    const lines = [];
-    lines.push(`One Stroke Challenge · Seed ${summary.seed}`);
-    lines.push(
-      `Resultat: ${summary.completedCount}/${summary.totalLevels} klara · ${toDisplayScore(summary.totalScore)} poäng · ${toDisplayTime(summary.totalTimeMs)}`,
-    );
-    if (summary.averageSplitMs) {
-      lines.push(`Snitt/split: ${toDisplayTime(summary.averageSplitMs)}`);
+  getChallengeActionTotals(splits = []) {
+    if (!Array.isArray(splits)) {
+      return { undoCount: 0, resetCount: 0, hintCount: 0 };
     }
+
+    return splits.reduce(
+      (acc, split) => {
+        if (!split?.completed) {
+          return acc;
+        }
+        acc.undoCount += Number(split.undoCount) || 0;
+        acc.resetCount += Number(split.resetCount) || 0;
+        acc.hintCount += Number(split.hintCount) || 0;
+        return acc;
+      },
+      { undoCount: 0, resetCount: 0, hintCount: 0 },
+    );
+  }
+
+  buildChallengeSummaryPayload(summary, options = {}) {
+    const exportedAtIso = typeof options.exportedAtIso === "string" ? options.exportedAtIso : new Date().toISOString();
+    const startedAtIso = new Date(this.challengeRunMeta.startedAtMs).toISOString();
+    const isCompleted = summary.totalLevels > 0 && summary.completedCount >= summary.totalLevels;
+    const finishedAtIso = typeof options.finishedAtIso === "string"
+      ? options.finishedAtIso
+      : isCompleted
+        ? exportedAtIso
+        : null;
+    const runId = this.challengeRunMeta.runId || createRunId();
+    this.challengeRunMeta.runId = runId;
+    const source = options.source || "live-challenge";
+    const totals = this.getChallengeActionTotals(summary.splits);
+    const completionRate = summary.totalLevels > 0 ? summary.completedCount / summary.totalLevels : 0;
+    const normalizedSplits = Array.isArray(summary.splits)
+      ? summary.splits.map((split) => ({
+          index: Number(split.index) || 0,
+          levelId: String(split.levelId ?? ""),
+          levelName: String(split.levelName ?? ""),
+          difficulty: String(split.difficulty ?? ""),
+          par: Number(split.par) || 0,
+          completed: Boolean(split.completed),
+          timeMs: Number.isFinite(split.timeMs) ? Number(split.timeMs) : null,
+          undoCount: Number(split.undoCount) || 0,
+          resetCount: Number(split.resetCount) || 0,
+          hintCount: Number(split.hintCount) || 0,
+          penaltySeconds: Number.isFinite(split.penaltySeconds) ? Number(split.penaltySeconds) : 0,
+          score: Number(split.score) || 0,
+        }))
+      : [];
+
+    return {
+      schemaVersion: CHALLENGE_SUMMARY_SCHEMA_VERSION,
+      kind: CHALLENGE_SUMMARY_SCHEMA_KIND,
+      exportedAt: exportedAtIso,
+      game: {
+        id: "one-stroke",
+        title: "One Stroke",
+        levelFormatVersion: LEVEL_FORMAT_VERSION,
+      },
+      mode: "challenge",
+      source,
+      run: {
+        id: runId,
+        seed: summary.seed,
+        status: isCompleted ? "completed" : "in-progress",
+        startedAt: startedAtIso,
+        finishedAt: finishedAtIso,
+        completedCount: Number(summary.completedCount) || 0,
+        totalLevels: Number(summary.totalLevels) || 0,
+        completionRate: Number(completionRate.toFixed(6)),
+      },
+      totals: {
+        score: Number(summary.totalScore) || 0,
+        timeMs: Number(summary.totalTimeMs) || 0,
+        penaltySeconds: Number(summary.totalPenaltySeconds) || 0,
+        averageSplitMs: Number.isFinite(summary.averageSplitMs) ? Number(summary.averageSplitMs) : null,
+        undoCount: totals.undoCount,
+        resetCount: totals.resetCount,
+        hintCount: totals.hintCount,
+      },
+      splits: normalizedSplits,
+    };
+  }
+
+  buildChallengeSummaryText(payload) {
+    const lines = [];
+    lines.push(`one_stroke_challenge_summary_v${payload.schemaVersion}`);
+    lines.push(`kind\t${payload.kind}`);
+    lines.push(`source\t${payload.source}`);
+    lines.push(`exported_at\t${payload.exportedAt}`);
+    lines.push(`run_id\t${payload.run.id}`);
+    lines.push(`seed\t${payload.run.seed}`);
+    lines.push(`status\t${payload.run.status}`);
+    lines.push(`completed\t${payload.run.completedCount}/${payload.run.totalLevels}`);
+    lines.push(`completion_rate\t${toMachineDecimal(payload.run.completionRate, 6)}`);
+    lines.push(`completion_rate_percent\t${toMachineDecimal(payload.run.completionRate * 100, 1)}`);
+    lines.push(`started_at\t${payload.run.startedAt}`);
+    lines.push(`finished_at\t${payload.run.finishedAt ?? "--"}`);
+    lines.push(`score\t${payload.totals.score}`);
+    lines.push(`time_ms\t${payload.totals.timeMs}`);
+    lines.push(`time_display\t${toDisplayTime(payload.totals.timeMs)}`);
+    lines.push(`penalty_seconds\t${toMachineDecimal(payload.totals.penaltySeconds, 1)}`);
+    lines.push(`average_split_ms\t${payload.totals.averageSplitMs ?? ""}`);
+    lines.push(`undo_count\t${payload.totals.undoCount}`);
+    lines.push(`reset_count\t${payload.totals.resetCount}`);
+    lines.push(`hint_count\t${payload.totals.hintCount}`);
     lines.push("");
-    lines.push("Splits:");
-    for (const split of summary.splits) {
-      const diff = DIFFICULTY_META[split.difficulty];
-      if (split.completed) {
-        lines.push(
-          `${split.index}. ${diff.shortLabel} ${split.levelName} | ${toDisplayTime(split.timeMs)} | U${split.undoCount}/R${split.resetCount}/H${split.hintCount} | ${toDisplayScore(split.score)}p`,
-        );
-      } else {
-        lines.push(`${split.index}. ${diff.shortLabel} ${split.levelName} | pending`);
-      }
+    lines.push("splits_tsv");
+    lines.push("index\tlevel_id\tlevel_name\tdifficulty\tpar\tcompleted\ttime_ms\tundo\treset\thint\tpenalty_seconds\tscore");
+    for (const split of payload.splits) {
+      const safeLevelName = String(split.levelName ?? "").replace(/[\t\r\n]+/g, " ").trim();
+      lines.push(
+        `${split.index}\t${split.levelId}\t${safeLevelName}\t${split.difficulty}\t${split.par}\t${split.completed ? 1 : 0}\t${split.timeMs ?? ""}\t${split.undoCount}\t${split.resetCount}\t${split.hintCount}\t${toMachineDecimal(split.penaltySeconds, 1)}\t${split.score}`,
+      );
     }
     return lines.join("\n");
   }
 
   async copyChallengeSummary() {
     const summary = this.getChallengeSummary();
-    const text = this.buildChallengeShareText(summary);
+    const payload = this.buildChallengeSummaryPayload(summary, { source: "clipboard-text" });
+    const text = this.buildChallengeSummaryText(payload);
 
     try {
       if (navigator.clipboard?.writeText) {
@@ -743,7 +901,7 @@ export class OneStrokeApp {
         document.execCommand("copy");
         textarea.remove();
       }
-      this.setStatus("Challenge-summary kopierad till urklipp.");
+      this.setStatus("Challenge-summary (text v1) kopierad till urklipp.");
     } catch {
       this.setStatus("Kunde inte kopiera summary automatiskt.", "loss");
     }
@@ -751,24 +909,19 @@ export class OneStrokeApp {
 
   exportChallengeSummary() {
     const summary = this.getChallengeSummary();
-    const payload = {
-      game: "One Stroke",
-      exportedAt: new Date().toISOString(),
-      mode: "challenge",
-      ...summary,
-    };
+    const payload = this.buildChallengeSummaryPayload(summary, { source: "json-export" });
     const json = JSON.stringify(payload, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    const safeSeed = summary.seed.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-").slice(0, 40) || "challenge";
+    const safeSeed = payload.run.seed.replace(/[^a-z0-9_-]+/gi, "-").replace(/-+/g, "-").slice(0, 40) || "challenge";
     link.href = url;
-    link.download = `one-stroke-${safeSeed}-summary.json`;
+    link.download = `one-stroke-${safeSeed}-summary-v${payload.schemaVersion}.json`;
     document.body.append(link);
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
-    this.setStatus("Challenge-summary exporterad som JSON.");
+    this.setStatus("Challenge-summary exporterad som JSON (schema v1).");
   }
 
   renderModeButtons() {
@@ -856,6 +1009,24 @@ export class OneStrokeApp {
     this.boardModeLabelEl.textContent = "Single-player · Kampanj";
   }
 
+  isCompletedChallengeRun(run) {
+    return Number(run?.totalLevels) > 0 && Number(run?.completedCount) >= Number(run?.totalLevels);
+  }
+
+  getSortedChallengeRuns(runs) {
+    return [...runs].sort((a, b) => {
+      const scoreDiff = (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0);
+      if (scoreDiff !== 0) {
+        return scoreDiff;
+      }
+      const timeDiff = (Number(a.totalTimeMs) || Number.MAX_SAFE_INTEGER) - (Number(b.totalTimeMs) || Number.MAX_SAFE_INTEGER);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      return String(b.finishedAt ?? "").localeCompare(String(a.finishedAt ?? ""));
+    });
+  }
+
   renderHighScoreView() {
     if (
       !this.highScoreBestChallengeScoreEl ||
@@ -870,7 +1041,7 @@ export class OneStrokeApp {
     const runs = Array.isArray(this.challengeRunHistory) ? this.challengeRunHistory : [];
     const solvedCount = Object.keys(this.progress.solvedLevels).length;
     const bestChallengeScore = runs.length > 0 ? Math.max(...runs.map((run) => Number(run.totalScore) || 0)) : 0;
-    const completeRuns = runs.filter((run) => Number(run.completedCount) >= Number(run.totalLevels) && run.totalLevels > 0);
+    const completeRuns = runs.filter((run) => this.isCompletedChallengeRun(run));
     const bestChallengeTimeMs = completeRuns.length > 0
       ? Math.min(...completeRuns.map((run) => Number(run.totalTimeMs) || Number.POSITIVE_INFINITY))
       : null;
@@ -879,21 +1050,16 @@ export class OneStrokeApp {
     this.highScoreBestChallengeTimeEl.textContent = bestChallengeTimeMs ? toDisplayTime(bestChallengeTimeMs) : "--";
     this.highScoreCampaignSolvedEl.textContent = `${solvedCount} / ${CAMPAIGN_TOTAL_LEVELS}`;
     this.highScoreRunCountEl.textContent = String(runs.length);
+    this.renderCampaignDifficultyStats();
+    this.renderChallengeRunStats();
 
-    const sorted = [...runs].sort((a, b) => {
-      const scoreDiff = (Number(b.totalScore) || 0) - (Number(a.totalScore) || 0);
-      if (scoreDiff !== 0) {
-        return scoreDiff;
-      }
-      const timeDiff = (Number(a.totalTimeMs) || Number.MAX_SAFE_INTEGER) - (Number(b.totalTimeMs) || Number.MAX_SAFE_INTEGER);
-      if (timeDiff !== 0) {
-        return timeDiff;
-      }
-      return String(b.finishedAt ?? "").localeCompare(String(a.finishedAt ?? ""));
-    });
+    const sorted = this.getSortedChallengeRuns(runs);
+    const visibleRuns = sorted.slice(0, CHALLENGE_HISTORY_LIMIT);
 
     this.highScoreRunListEl.innerHTML = "";
-    if (sorted.length === 0) {
+    if (visibleRuns.length === 0) {
+      this.selectedHighScoreRunId = null;
+      this.renderHighScoreRunDetail(null, []);
       const empty = document.createElement("p");
       empty.className = "hub-empty";
       empty.textContent = "Ingen challenge-historik ännu. Spela en challenge-run för att fylla listan.";
@@ -901,9 +1067,16 @@ export class OneStrokeApp {
       return;
     }
 
-    sorted.slice(0, CHALLENGE_HISTORY_LIMIT).forEach((run, index) => {
+    if (!visibleRuns.some((run) => run.id === this.selectedHighScoreRunId)) {
+      this.selectedHighScoreRunId = visibleRuns[0].id;
+    }
+
+    visibleRuns.forEach((run, index) => {
       const row = document.createElement("article");
       row.className = "hub-run-row";
+      row.setAttribute("role", "button");
+      row.setAttribute("tabindex", "0");
+      row.classList.toggle("active", run.id === this.selectedHighScoreRunId);
 
       const title = document.createElement("div");
       title.className = "hub-run-title";
@@ -914,9 +1087,282 @@ export class OneStrokeApp {
       meta.textContent =
         `${toDisplayTime(run.totalTimeMs)} · ${run.completedCount}/${run.totalLevels} klara · ${toDisplayDateTime(run.finishedAt)}`;
 
+      const selectRun = () => {
+        this.selectedHighScoreRunId = run.id;
+        this.renderHighScoreView();
+      };
+      row.addEventListener("click", selectRun);
+      row.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          selectRun();
+        }
+      });
+
       row.append(title, meta);
       this.highScoreRunListEl.append(row);
     });
+
+    const selectedRun = visibleRuns.find((run) => run.id === this.selectedHighScoreRunId) ?? visibleRuns[0];
+    this.renderHighScoreRunDetail(selectedRun, sorted);
+  }
+
+  getRunPersonalBests(runs) {
+    const bestScore = runs.reduce((max, run) => Math.max(max, Number(run.totalScore) || 0), 0);
+    const completedRuns = runs.filter((run) => this.isCompletedChallengeRun(run));
+    const bestTimeMsRaw = completedRuns.reduce(
+      (min, run) => Math.min(min, Number(run.totalTimeMs) || Number.POSITIVE_INFINITY),
+      Number.POSITIVE_INFINITY,
+    );
+
+    return {
+      bestScore,
+      bestTimeMs: Number.isFinite(bestTimeMsRaw) ? bestTimeMsRaw : null,
+    };
+  }
+
+  createRunDetailMetricCard(label, value, tone = "neutral") {
+    const card = document.createElement("article");
+    card.className = "hub-mini-card run-detail-card";
+
+    const cardLabel = document.createElement("span");
+    cardLabel.className = "label";
+    cardLabel.textContent = label;
+
+    const cardValue = document.createElement("strong");
+    cardValue.textContent = value;
+    if (tone === "better") {
+      cardValue.classList.add("metric-better");
+    } else if (tone === "worse") {
+      cardValue.classList.add("metric-worse");
+    }
+
+    card.append(cardLabel, cardValue);
+    return card;
+  }
+
+  renderHighScoreRunDetail(selectedRun, runs) {
+    if (!this.highScoreRunDetailEl) {
+      return;
+    }
+
+    this.highScoreRunDetailEl.innerHTML = "";
+    if (!selectedRun) {
+      const empty = document.createElement("p");
+      empty.className = "hub-empty";
+      empty.textContent = "Välj en run för att se detaljerad jämförelse mot personligt bästa.";
+      this.highScoreRunDetailEl.append(empty);
+      return;
+    }
+
+    const rank = runs.findIndex((run) => run.id === selectedRun.id) + 1;
+    const completedCount = Number(selectedRun.completedCount) || 0;
+    const totalLevels = Number(selectedRun.totalLevels) || 0;
+    const isComplete = this.isCompletedChallengeRun(selectedRun);
+    const score = Number(selectedRun.totalScore) || 0;
+    const timeMs = Number(selectedRun.totalTimeMs) || 0;
+    const undoCount = Number(selectedRun.undoCount) || 0;
+    const resetCount = Number(selectedRun.resetCount) || 0;
+    const hintCount = Number(selectedRun.hintCount) || 0;
+    const personalBests = this.getRunPersonalBests(runs);
+    const scoreDelta = score - personalBests.bestScore;
+    const timeDelta = isComplete && Number.isFinite(personalBests.bestTimeMs)
+      ? timeMs - personalBests.bestTimeMs
+      : null;
+
+    const summary = document.createElement("p");
+    summary.className = "run-detail-summary";
+    summary.textContent =
+      `Run #${rank} · Seed ${selectedRun.seed || "--"} · ${completedCount}/${totalLevels} klara · ${toDisplayDateTime(selectedRun.finishedAt)}`;
+    this.highScoreRunDetailEl.append(summary);
+
+    const metricGrid = document.createElement("div");
+    metricGrid.className = "hub-mini-grid run-detail-grid";
+    metricGrid.append(
+      this.createRunDetailMetricCard("Poäng", `${toDisplayScore(score)} p`),
+      this.createRunDetailMetricCard(
+        "Poäng vs PB",
+        toDisplaySignedScoreDelta(scoreDelta),
+        scoreDelta === 0 ? "better" : "worse",
+      ),
+      this.createRunDetailMetricCard("Tid", toDisplayTime(timeMs)),
+      this.createRunDetailMetricCard(
+        "Tid vs PB",
+        isComplete ? toDisplaySignedTimeDelta(timeDelta) : "Kräver full run",
+        isComplete && timeDelta === 0 ? "better" : isComplete ? "worse" : "neutral",
+      ),
+      this.createRunDetailMetricCard("Klara", `${completedCount}/${totalLevels}`),
+      this.createRunDetailMetricCard("U / R / H", `U:${undoCount} R:${resetCount} H:${hintCount}`),
+    );
+    this.highScoreRunDetailEl.append(metricGrid);
+
+    const splitTitle = document.createElement("p");
+    splitTitle.className = "run-detail-subtitle";
+    splitTitle.textContent = "Splits";
+    this.highScoreRunDetailEl.append(splitTitle);
+
+    const splitList = document.createElement("div");
+    splitList.className = "challenge-split-list highscore-split-list";
+
+    const splits = Array.isArray(selectedRun.splits)
+      ? [...selectedRun.splits].sort((a, b) => (Number(a.index) || 0) - (Number(b.index) || 0))
+      : [];
+    if (splits.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "hub-empty";
+      empty.textContent = "Ingen split-data sparad för den här runen.";
+      splitList.append(empty);
+    } else {
+      splits.forEach((split) => {
+        const diff = DIFFICULTY_META[split.difficulty] ?? { shortLabel: "?" };
+        const row = document.createElement("article");
+        row.className = "split-row";
+        row.classList.toggle("done", Boolean(split.completed));
+
+        const title = document.createElement("div");
+        title.className = "split-title";
+        title.textContent = `${split.index}. ${diff.shortLabel} · ${split.levelName || split.levelId}`;
+
+        const meta = document.createElement("div");
+        meta.className = "split-meta";
+        if (split.completed) {
+          meta.textContent =
+            `${toDisplayTime(split.timeMs)} · U:${split.undoCount} R:${split.resetCount} H:${split.hintCount} · ${toDisplayScore(split.score)} p`;
+        } else {
+          meta.textContent = "Inte klar ännu";
+        }
+
+        row.append(title, meta);
+        splitList.append(row);
+      });
+    }
+
+    this.highScoreRunDetailEl.append(splitList);
+  }
+
+  getCampaignDifficultyStats() {
+    const solvedLevels = this.progress.solvedLevels ?? {};
+    const difficultyIds = DIFFICULTY_ORDER.filter((difficultyId) => Boolean(DIFFICULTY_META[difficultyId]));
+
+    return difficultyIds.map((difficultyId) => {
+      const levels = CAMPAIGN_LEVELS.filter((level) => level.difficulty === difficultyId);
+      const solvedEntries = levels
+        .map((level) => solvedLevels[level.id] ?? null)
+        .filter(Boolean);
+      const solvedCount = solvedEntries.length;
+      const totalLevels = levels.length;
+      const bestTimeMsRaw = solvedEntries.reduce((min, entry) => {
+        const bestTimeMs = Number(entry.bestTimeMs);
+        if (!Number.isFinite(bestTimeMs) || bestTimeMs <= 0) {
+          return min;
+        }
+        return Math.min(min, bestTimeMs);
+      }, Number.POSITIVE_INFINITY);
+      const timeAggregate = solvedEntries.reduce(
+        (acc, entry) => {
+          const bestTimeMs = Number(entry.bestTimeMs);
+          if (!Number.isFinite(bestTimeMs) || bestTimeMs <= 0) {
+            return acc;
+          }
+          return {
+            sum: acc.sum + bestTimeMs,
+            count: acc.count + 1,
+          };
+        },
+        { sum: 0, count: 0 },
+      );
+
+      return {
+        difficultyId,
+        label: DIFFICULTY_META[difficultyId].label,
+        solvedCount,
+        totalLevels,
+        bestTimeMs: Number.isFinite(bestTimeMsRaw) ? bestTimeMsRaw : null,
+        averageTimeMs: timeAggregate.count > 0 ? Math.round(timeAggregate.sum / timeAggregate.count) : null,
+        winRate: totalLevels > 0 ? (solvedCount / totalLevels) * 100 : null,
+      };
+    });
+  }
+
+  renderCampaignDifficultyStats() {
+    if (!this.highScoreDifficultyBodyEl) {
+      return;
+    }
+
+    const rows = this.getCampaignDifficultyStats();
+    this.highScoreDifficultyBodyEl.innerHTML = "";
+
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+
+      const difficultyCell = document.createElement("td");
+      difficultyCell.textContent = row.label;
+
+      const solvedCell = document.createElement("td");
+      solvedCell.textContent = `${row.solvedCount}/${row.totalLevels}`;
+
+      const bestCell = document.createElement("td");
+      bestCell.textContent = row.bestTimeMs ? toDisplayTime(row.bestTimeMs) : "--";
+
+      const averageCell = document.createElement("td");
+      averageCell.textContent = row.averageTimeMs ? toDisplayTime(row.averageTimeMs) : "--";
+
+      const winRateCell = document.createElement("td");
+      winRateCell.textContent = toDisplayPercent(row.winRate);
+
+      tr.append(difficultyCell, solvedCell, bestCell, averageCell, winRateCell);
+      this.highScoreDifficultyBodyEl.append(tr);
+    });
+  }
+
+  getChallengeRunStats() {
+    const runs = Array.isArray(this.challengeRunHistory) ? this.challengeRunHistory : [];
+    const completedRuns = runs.filter((run) => Number(run.totalLevels) > 0 && Number(run.completedCount) >= Number(run.totalLevels));
+    const runCount = runs.length;
+    const completedRunCount = completedRuns.length;
+    const totalScore = runs.reduce((sum, run) => sum + (Number(run.totalScore) || 0), 0);
+    const totalCompletedLevels = runs.reduce((sum, run) => sum + (Number(run.completedCount) || 0), 0);
+    const totalLevels = runs.reduce((sum, run) => sum + (Number(run.totalLevels) || 0), 0);
+    const totalUndo = runs.reduce((sum, run) => sum + (Number(run.undoCount) || 0), 0);
+    const totalHint = runs.reduce((sum, run) => sum + (Number(run.hintCount) || 0), 0);
+    const totalCompletedRunTimeMs = completedRuns.reduce((sum, run) => sum + (Number(run.totalTimeMs) || 0), 0);
+
+    return {
+      runCount,
+      completedRunCount,
+      completionRate: runCount > 0 ? (completedRunCount / runCount) * 100 : null,
+      averageScore: runCount > 0 ? totalScore / runCount : null,
+      averageTimeMs: completedRunCount > 0 ? Math.round(totalCompletedRunTimeMs / completedRunCount) : null,
+      averageCompletedLevels: runCount > 0 ? totalCompletedLevels / runCount : null,
+      averageTotalLevels: runCount > 0 ? totalLevels / runCount : null,
+      averageUndo: runCount > 0 ? totalUndo / runCount : null,
+      averageHint: runCount > 0 ? totalHint / runCount : null,
+    };
+  }
+
+  renderChallengeRunStats() {
+    if (
+      !this.highScoreRunCompletionRateEl ||
+      !this.highScoreRunAverageScoreEl ||
+      !this.highScoreRunAverageTimeEl ||
+      !this.highScoreRunAverageCompletedEl ||
+      !this.highScoreRunAverageUndoEl ||
+      !this.highScoreRunAverageHintEl
+    ) {
+      return;
+    }
+
+    const stats = this.getChallengeRunStats();
+    this.highScoreRunCompletionRateEl.textContent =
+      stats.runCount > 0 ? `${stats.completedRunCount}/${stats.runCount} · ${toDisplayPercent(stats.completionRate)}` : "--";
+    this.highScoreRunAverageScoreEl.textContent = stats.runCount > 0 ? `${toDisplayScore(stats.averageScore)} p` : "--";
+    this.highScoreRunAverageTimeEl.textContent = stats.averageTimeMs ? toDisplayTime(stats.averageTimeMs) : "--";
+    this.highScoreRunAverageCompletedEl.textContent =
+      stats.runCount > 0
+        ? `${toDisplayDecimal(stats.averageCompletedLevels, 1)} / ${toDisplayDecimal(stats.averageTotalLevels, 1)}`
+        : "--";
+    this.highScoreRunAverageUndoEl.textContent = stats.runCount > 0 ? toDisplayDecimal(stats.averageUndo, 1) : "--";
+    this.highScoreRunAverageHintEl.textContent = stats.runCount > 0 ? toDisplayDecimal(stats.averageHint, 1) : "--";
   }
 
   getAchievementMetrics() {
@@ -1924,21 +2370,11 @@ export class OneStrokeApp {
       return;
     }
 
-    const totals = summary.splits.reduce(
-      (acc, split) => {
-        if (!split.completed) {
-          return acc;
-        }
-        acc.undoCount += split.undoCount;
-        acc.resetCount += split.resetCount;
-        acc.hintCount += split.hintCount;
-        return acc;
-      },
-      { undoCount: 0, resetCount: 0, hintCount: 0 },
-    );
+    const totals = this.getChallengeActionTotals(summary.splits);
+    const runId = this.challengeRunMeta.runId || createRunId();
 
     const entry = {
-      id: `run-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`,
+      id: runId,
       seed: summary.seed,
       startedAt: new Date(this.challengeRunMeta.startedAtMs).toISOString(),
       finishedAt: new Date().toISOString(),
@@ -1955,6 +2391,7 @@ export class OneStrokeApp {
 
     this.challengeRunHistory = [entry, ...this.challengeRunHistory].slice(0, CHALLENGE_HISTORY_LIMIT);
     saveChallengeRunHistory(this.challengeRunHistory, CHALLENGE_HISTORY_LIMIT);
+    this.challengeRunMeta.runId = runId;
     this.challengeRunMeta.saved = true;
     this.renderHubPanels();
   }

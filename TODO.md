@@ -13,9 +13,9 @@
 
 ## P0 - Nasta leverabler
 
-- [ ] Visa global statistik: best time, medeltid, win-rate per svaarsighet.
-- [ ] Lagg till riktig resultatvy per run med jamforelse mot personligt besta.
-- [ ] Standardisera exportpayload for challenge-summary (JSON + text).
+- [x] Visa global statistik: best time, medeltid, win-rate per svaarsighet.
+- [x] Lagg till riktig resultatvy per run med jamforelse mot personligt besta.
+- [x] Standardisera exportpayload for challenge-summary (JSON + text).
 
 ## P1 - Singleplayer kvalitet
 

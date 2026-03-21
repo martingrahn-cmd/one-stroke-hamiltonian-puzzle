@@ -176,7 +176,61 @@
                 <strong id="highScoreRunCount">0</strong>
               </article>
             </div>
+
+            <section class="hub-subpanel">
+              <h3>Kampanj per svårighet</h3>
+              <div class="difficulty-stats-wrap">
+                <table class="difficulty-stats-table" aria-label="Kampanjstatistik per svårighetsgrad">
+                  <thead>
+                    <tr>
+                      <th>Svårighet</th>
+                      <th>Klara</th>
+                      <th>Bästa tid</th>
+                      <th>Medeltid</th>
+                      <th>Win-rate</th>
+                    </tr>
+                  </thead>
+                  <tbody id="highScoreDifficultyBody"></tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="hub-subpanel">
+              <h3>Challenge-run statistik</h3>
+              <div class="hub-mini-grid run-stats-grid">
+                <article class="hub-mini-card">
+                  <span class="label">Fulla runs</span>
+                  <strong id="highScoreRunCompletionRate">--</strong>
+                </article>
+                <article class="hub-mini-card">
+                  <span class="label">Snittpoäng / run</span>
+                  <strong id="highScoreRunAverageScore">--</strong>
+                </article>
+                <article class="hub-mini-card">
+                  <span class="label">Snitttid (full run)</span>
+                  <strong id="highScoreRunAverageTime">--</strong>
+                </article>
+                <article class="hub-mini-card">
+                  <span class="label">Snitt klara / run</span>
+                  <strong id="highScoreRunAverageCompleted">--</strong>
+                </article>
+                <article class="hub-mini-card">
+                  <span class="label">Snitt undo / run</span>
+                  <strong id="highScoreRunAverageUndo">--</strong>
+                </article>
+                <article class="hub-mini-card">
+                  <span class="label">Snitt hint / run</span>
+                  <strong id="highScoreRunAverageHint">--</strong>
+                </article>
+              </div>
+            </section>
+
             <div id="highScoreRunList" class="hub-list" role="list"></div>
+
+            <section class="hub-subpanel run-detail-panel">
+              <h3>Run-detalj</h3>
+              <div id="highScoreRunDetail" class="run-detail-content"></div>
+            </section>
           </section>
 
           <section id="achievementView" class="hub-pane" hidden>

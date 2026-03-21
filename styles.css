@@ -585,6 +585,63 @@ button:disabled {
   letter-spacing: 0.03em;
 }
 
+.hub-subpanel {
+  margin-top: 12px;
+}
+
+.hub-subpanel h3 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 0.92rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #d7ecf8;
+}
+
+.difficulty-stats-wrap {
+  margin-top: 8px;
+  border: 1px solid #345f73;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #1737478f, #1128388f);
+  overflow-x: auto;
+}
+
+.difficulty-stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+}
+
+.difficulty-stats-table th,
+.difficulty-stats-table td {
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.74rem;
+  border-bottom: 1px solid #2f5467;
+  font-variant-numeric: tabular-nums;
+}
+
+.difficulty-stats-table th {
+  color: #a9c0ce;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  background: #112938a3;
+}
+
+.difficulty-stats-table td {
+  color: #e3f2fb;
+}
+
+.difficulty-stats-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.run-stats-grid {
+  margin-top: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .hub-list {
   margin-top: 10px;
   display: flex;
@@ -600,6 +657,24 @@ button:disabled {
   border-radius: 12px;
   padding: 9px 10px;
   background: linear-gradient(145deg, #1737478f, #1128388f);
+  cursor: pointer;
+}
+
+.hub-run-row:hover {
+  border-color: #4a7e93;
+}
+
+.hub-run-row:focus-visible {
+  outline: 2px solid #79d5ff;
+  outline-offset: 2px;
+}
+
+.hub-run-row.active {
+  border-color: #7ad4ff;
+  box-shadow:
+    0 0 0 1px #86dfff8a inset,
+    0 0 12px #6bccff5c;
+  background: linear-gradient(145deg, #214b5d93, #17374793);
 }
 
 .hub-run-title {
@@ -619,6 +694,46 @@ button:disabled {
   margin: 10px 0 0;
   color: var(--text-soft);
   font-size: 0.86rem;
+}
+
+.run-detail-content {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.run-detail-summary {
+  margin: 0;
+  color: #c6deea;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+}
+
+.run-detail-grid {
+  margin-top: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.run-detail-card strong.metric-better {
+  color: #c9f8e8;
+}
+
+.run-detail-card strong.metric-worse {
+  color: #ffd6d6;
+}
+
+.run-detail-subtitle {
+  margin: 4px 0 0;
+  color: #a6c3d3;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 700;
+}
+
+.highscore-split-list {
+  max-height: 310px;
 }
 
 .achievement-list {
@@ -1502,6 +1617,14 @@ div.cell {
 
   .board-help {
     max-width: none;
+  }
+
+  .run-stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .run-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .level-select-card {

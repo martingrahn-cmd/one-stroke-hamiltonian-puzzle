@@ -8,9 +8,10 @@
 
 ## Aktivt arbete (nasta konkreta block)
 
-- Global statistikoversikt per svaarighetsgrad och per challenge-run.
-- Poang- och split-data till en stabil modell som senare kan skickas till backend.
-- Exportformat som fungerar for delning med kompisar och framtida challenge-lobby.
+- Global statistikoversikt per svaarighetsgrad och per challenge-run (levererad i High-score-vyn).
+- Riktig resultatvy per run med jamforelse mot personligt basta (levererad i High-score-vyn).
+- Standardiserad challenge-summary payload (JSON + text, schema v1) levererad for backend/lobby-floden.
+- Nasta steg: knyta payloaden till backend-kontrakt for asynk multiplayer.
 
 ## Pause / senare
 

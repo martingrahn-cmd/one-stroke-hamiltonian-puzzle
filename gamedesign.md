@@ -164,11 +164,14 @@ UI-principer:
 11. Huvudmeny/hub implementerad (Single-player, Multiplayer, High-score, Achievement, Credit).
 12. Lokal challenge-run historik implementerad (senaste 20 runs i `localStorage`).
 13. Trophy-system implementerat i Achievement-vyn (15 brons, 10 silver, 5 guld, 1 platinum).
+14. Global high-score statistik implementerad (per svårighetsgrad + challenge-run snitt).
+15. Detaljerad run-resultatvy implementerad i High-score (valbar run + jämförelse mot personligt bästa + split-lista).
+16. Standardiserad challenge-summary payload implementerad (schema v1 för både JSON-export och text-copy).
 
 ## 15. Föreslagna nästa steg
-1. Lägg till global statistiköversikt (per difficulty och per challenge-run).
-2. Förbättra hint-system till v2 (flerkandidats-hints och tydligare confidence/guide-lager).
-3. Lägg till backend för challenge-resultat och vänjämförelse.
+1. Förbättra hint-system till v2 (flerkandidats-hints och tydligare confidence/guide-lager).
+2. Lägg till backend för challenge-resultat och vänjämförelse.
+3. Knyt challenge-summary schema v1 till backend-kontrakt för lobby/matchflöden.
 
 ## 16. Skalbarhet: 200 nivåer
 Ja, 200 nivåer är fullt möjligt med rätt innehållspipeline.
