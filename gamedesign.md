@@ -44,16 +44,22 @@ Förlust/ogiltigt läge:
 ## 6. Spelmekanik (MVP)
 - Dra med mus/finger för att skapa väg.
 - Ångra-knapp (`Undo`)
+- Dra bakåt till föregående nod för snabb ångra (räknas som undo).
 - Starta om-knapp (`Reset`)
 - Valfri hint-knapp (för senare iteration, ej nödvändigt i första versionen)
 
 ## 7. Svårighetsdesign
 Vi skalar svårighet genom:
 1. Större grid
-2. Fler blockerade rutor
-3. Trängre passager ("choke points")
-4. Startpositioner som minskar uppenbara val
-5. Särskilda strukturer som skapar parity-fällor
+2. Högre strukturell komplexitet (fler grenpunkter och giltiga val)
+3. Kontrollerade hinder för form, inte för att skapa en enda korridor
+4. Trängre passager ("choke points") i kombination med alternativa vägar
+5. Startpositioner som minskar uppenbara val
+6. Särskilda strukturer som skapar parity-fällor
+
+Viktig princip:
+- För många hinder gör ofta banan trivial (nästan "en väg att rita").
+- Svårighet ska i första hand komma från **beslutsdensitet**, inte från låg öppenhet.
 
 Föreslagen progression:
 - **Nybörjare:** 4x4, få hinder, tydliga tvångsdrag.
@@ -118,7 +124,7 @@ Ej i MVP:
 
 ## 12. Beslutade Designval
 1. Slutnod: **Valfri nod** (fri slutnod).
-2. Backtracking: **Strikt undo** (ingen drag-genom av redan lagd väg).
+2. Backtracking: **Endast bakåt längs lagd väg** (dra bakåt eller `Undo`, ingen fri drag-genom av redan besökta noder).
 3. UI-fokus: **Desktop first**, med mobil i åtanke.
 
 ## 13. Visuell Riktning (Låst)
@@ -152,10 +158,16 @@ UI-principer:
 5. Kampanjprogress + nivåupplåsning sparas lokalt.
 6. Nivå 3 och 4 rebalanserade för jämnare tidig progression.
 7. Challenge-resultatvy med split-tider, totalpoäng och export av summary implementerad.
+8. Hint-system v1 implementerat (nästa rekommenderade nod + hint-straff i challenge-poäng).
+9. Komplett level select implementerad (alla 200 nivåer med sök och filter).
+10. Drag-back undo implementerat (bakåt-drag till föregående nod räknas som undo, inkl. challenge-straff via undo-score).
+11. Huvudmeny/hub implementerad (Single-player, Multiplayer, High-score, Achievement, Credit).
+12. Lokal challenge-run historik implementerad (senaste 20 runs i `localStorage`).
+13. Trophy-system implementerat i Achievement-vyn (15 brons, 10 silver, 5 guld, 1 platinum).
 
 ## 15. Föreslagna nästa steg
 1. Lägg till global statistiköversikt (per difficulty och per challenge-run).
-2. Lägg till hint-system v1 (nästa säkra nod, med straff i score).
+2. Förbättra hint-system till v2 (flerkandidats-hints och tydligare confidence/guide-lager).
 3. Lägg till backend för challenge-resultat och vänjämförelse.
 
 ## 16. Skalbarhet: 200 nivåer
@@ -173,6 +185,7 @@ Tekniska nycklar (nuvarande implementation):
 2. Genererad datakälla: `src/data/campaign-levels.js` (200 nivåer)
 3. Integritetsvalidering via referenslösning (`solution`) innan nivåer används
 4. Seedad challenge-pool i `src/game/challenge-pool.js`
+5. Kvalitetsfilter i generatorn: min open ratio, min branch nodes/extra edges, max corridor ratio
 
 Lösbarhetsgaranti:
 1. Varje nivå genereras från en explicit Hamiltonian path.

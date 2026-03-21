@@ -18,8 +18,17 @@ const DIFFICULTY_SPECS = [
       [5, 5],
     ],
     openRange: [14, 22],
-    minExtraEdges: 0,
-    minBranchNodes: 0,
+    minOpenRatio: 0.66,
+    minExtraEdges: 1,
+    minBranchNodes: 1,
+    maxCorridorRatio: 0.82,
+    maxDeadEnds: 8,
+    minTurnRatio: 0.28,
+    minLayerSwitchRatio: 0.14,
+    maxPerimeterRatio: 0.68,
+    maxMonotonicLayerRunRatio: 0.78,
+    maxStraightRunRatio: 0.54,
+    pathProfiles: ["balanced", "center-weave", "edge-dive"],
   },
   {
     id: "medium",
@@ -30,8 +39,18 @@ const DIFFICULTY_SPECS = [
       [6, 6],
     ],
     openRange: [22, 30],
-    minExtraEdges: 2,
-    minBranchNodes: 1,
+    minOpenRatio: 0.72,
+    minExtraEdges: 3,
+    minBranchNodes: 3,
+    minBranchingRatio: 0.1,
+    maxCorridorRatio: 0.74,
+    maxDeadEnds: 7,
+    minTurnRatio: 0.34,
+    minLayerSwitchRatio: 0.19,
+    maxPerimeterRatio: 0.62,
+    maxMonotonicLayerRunRatio: 0.69,
+    maxStraightRunRatio: 0.47,
+    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag"],
   },
   {
     id: "hard",
@@ -42,8 +61,18 @@ const DIFFICULTY_SPECS = [
       [7, 7],
     ],
     openRange: [30, 40],
-    minExtraEdges: 4,
-    minBranchNodes: 2,
+    minOpenRatio: 0.78,
+    minExtraEdges: 6,
+    minBranchNodes: 5,
+    minBranchingRatio: 0.14,
+    maxCorridorRatio: 0.66,
+    maxDeadEnds: 6,
+    minTurnRatio: 0.38,
+    minLayerSwitchRatio: 0.24,
+    maxPerimeterRatio: 0.57,
+    maxMonotonicLayerRunRatio: 0.62,
+    maxStraightRunRatio: 0.4,
+    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "branch-hunter"],
   },
   {
     id: "very-hard",
@@ -54,10 +83,102 @@ const DIFFICULTY_SPECS = [
       [8, 8],
     ],
     openRange: [38, 48],
-    minExtraEdges: 6,
-    minBranchNodes: 3,
+    minOpenRatio: 0.82,
+    minExtraEdges: 9,
+    minBranchNodes: 7,
+    minBranchingRatio: 0.17,
+    maxCorridorRatio: 0.6,
+    maxDeadEnds: 5,
+    minTurnRatio: 0.42,
+    minLayerSwitchRatio: 0.28,
+    maxPerimeterRatio: 0.52,
+    maxMonotonicLayerRunRatio: 0.56,
+    maxStraightRunRatio: 0.34,
+    pathProfiles: ["center-weave", "edge-dive", "zigzag", "branch-hunter"],
   },
 ];
+
+const PATH_STYLE_PROFILES = [
+  {
+    id: "balanced",
+    startZone: "any",
+    weights: {
+      onward: 1.3,
+      centerAffinity: 0.46,
+      borderDistance: 0.52,
+      turn: 0.62,
+      escapeBorder: 0.72,
+      borderStick: 0.6,
+      borderPenalty: 2.25,
+      jitter: 0.22,
+    },
+    borderRatioTarget: 0.58,
+  },
+  {
+    id: "center-weave",
+    startZone: "center",
+    weights: {
+      onward: 1.1,
+      centerAffinity: 1.05,
+      borderDistance: 0.7,
+      turn: 1.08,
+      escapeBorder: 0.4,
+      borderStick: 0.45,
+      borderPenalty: 1.85,
+      jitter: 0.24,
+    },
+    borderRatioTarget: 0.55,
+  },
+  {
+    id: "edge-dive",
+    startZone: "edge",
+    weights: {
+      onward: 1.2,
+      centerAffinity: 0.6,
+      borderDistance: 0.82,
+      turn: 0.84,
+      escapeBorder: 1.2,
+      borderStick: 1.12,
+      borderPenalty: 2.6,
+      jitter: 0.2,
+    },
+    borderRatioTarget: 0.5,
+  },
+  {
+    id: "zigzag",
+    startZone: "edge-or-center",
+    weights: {
+      onward: 1.02,
+      centerAffinity: 0.44,
+      borderDistance: 0.53,
+      turn: 1.36,
+      escapeBorder: 0.6,
+      borderStick: 0.75,
+      borderPenalty: 2.08,
+      jitter: 0.28,
+    },
+    borderRatioTarget: 0.56,
+  },
+  {
+    id: "branch-hunter",
+    startZone: "any",
+    weights: {
+      onward: 1.65,
+      centerAffinity: 0.35,
+      borderDistance: 0.44,
+      turn: 0.74,
+      escapeBorder: 0.46,
+      borderStick: 0.42,
+      borderPenalty: 1.7,
+      jitter: 0.17,
+    },
+    borderRatioTarget: 0.6,
+  },
+];
+
+const PATH_STYLE_PROFILE_BY_ID = Object.fromEntries(
+  PATH_STYLE_PROFILES.map((profile) => [profile.id, profile]),
+);
 
 function key(x, y) {
   return `${x},${y}`;
@@ -111,16 +232,131 @@ function neighbors(x, y, width, height) {
   return result;
 }
 
-function generateSelfAvoidingPath(width, height, length, random, maxAttempts = 240) {
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function isBorderCell(x, y, width, height) {
+  return x === 0 || y === 0 || x === width - 1 || y === height - 1;
+}
+
+function borderDistance(x, y, width, height) {
+  return Math.min(x, y, width - 1 - x, height - 1 - y);
+}
+
+function normalizedCenterAffinity(x, y, width, height) {
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  const maxDistance = Math.hypot(centerX, centerY) || 1;
+  const distance = Math.hypot(x - centerX, y - centerY);
+  return 1 - distance / maxDistance;
+}
+
+function directionDeltaByKeys(fromKey, toKey) {
+  const [fromX, fromY] = parse(fromKey);
+  const [toX, toY] = parse(toKey);
+  return [toX - fromX, toY - fromY];
+}
+
+function getStartCandidates(width, height, zone) {
+  const candidates = [];
+  const minInteriorLayer = Math.max(1, Math.floor((Math.min(width, height) - 1) / 3));
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const onBorder = isBorderCell(x, y, width, height);
+      const interiorDepth = borderDistance(x, y, width, height);
+
+      if (zone === "edge" && onBorder) {
+        candidates.push([x, y]);
+      } else if (zone === "center" && interiorDepth >= minInteriorLayer) {
+        candidates.push([x, y]);
+      } else if (zone === "any") {
+        candidates.push([x, y]);
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function chooseStartCoord(width, height, random, zone) {
+  if (zone === "edge-or-center") {
+    const preferEdge = random() < 0.58;
+    const edgeCandidates = getStartCandidates(width, height, "edge");
+    const centerCandidates = getStartCandidates(width, height, "center");
+    const mixed = preferEdge ? edgeCandidates : centerCandidates;
+    const fallback = preferEdge ? centerCandidates : edgeCandidates;
+    const pool = mixed.length > 0 ? mixed : fallback;
+    if (pool.length > 0) {
+      return pool[Math.floor(random() * pool.length)];
+    }
+  }
+
+  const candidates = getStartCandidates(width, height, zone);
+  if (candidates.length > 0) {
+    return candidates[Math.floor(random() * candidates.length)];
+  }
+  return [Math.floor(random() * width), Math.floor(random() * height)];
+}
+
+function pickPathProfile(spec, random, difficultyIndex, attempt) {
+  const preferred = spec.pathProfiles?.length ? spec.pathProfiles : PATH_STYLE_PROFILES.map((profile) => profile.id);
+  const jitter = Math.floor(random() * preferred.length);
+  const profileId = preferred[(difficultyIndex + attempt + jitter) % preferred.length];
+  return PATH_STYLE_PROFILE_BY_ID[profileId] ?? PATH_STYLE_PROFILE_BY_ID.balanced;
+}
+
+function scorePathOption({
+  currentX,
+  currentY,
+  nextX,
+  nextY,
+  onwardCount,
+  width,
+  height,
+  profile,
+  prevDelta,
+  borderVisitedCount,
+  pathLength,
+  random,
+}) {
+  const weights = profile.weights;
+  const [nextDx, nextDy] = [nextX - currentX, nextY - currentY];
+  const turnValue = prevDelta && (prevDelta[0] !== nextDx || prevDelta[1] !== nextDy) ? 1 : 0;
+  const nextOnBorder = isBorderCell(nextX, nextY, width, height);
+  const currentOnBorder = isBorderCell(currentX, currentY, width, height);
+  const escapeBorder = currentOnBorder && !nextOnBorder ? 1 : 0;
+  const borderStick = currentOnBorder && nextOnBorder ? 1 : 0;
+  const projectedBorderRatio = (borderVisitedCount + (nextOnBorder ? 1 : 0)) / (pathLength + 1);
+  const borderOverflow = Math.max(0, projectedBorderRatio - profile.borderRatioTarget);
+  const maxBorderDistance = Math.max(1, Math.floor((Math.min(width, height) - 1) / 2));
+  const borderDistanceScore = borderDistance(nextX, nextY, width, height) / maxBorderDistance;
+  const centerAffinity = normalizedCenterAffinity(nextX, nextY, width, height);
+
+  return (
+    onwardCount * weights.onward +
+    centerAffinity * weights.centerAffinity +
+    borderDistanceScore * weights.borderDistance +
+    turnValue * weights.turn +
+    escapeBorder * weights.escapeBorder -
+    borderStick * weights.borderStick -
+    borderOverflow * weights.borderPenalty +
+    random() * weights.jitter
+  );
+}
+
+function generateSelfAvoidingPath(width, height, length, random, pathProfile, maxAttempts = 260) {
   if (length > width * height) {
     return null;
   }
 
+  const profile = pathProfile ?? PATH_STYLE_PROFILE_BY_ID.balanced;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const startX = Math.floor(random() * width);
-    const startY = Math.floor(random() * height);
+    const [startX, startY] = chooseStartCoord(width, height, random, profile.startZone);
     const path = [key(startX, startY)];
     const visited = new Set(path);
+    let borderVisitedCount = isBorderCell(startX, startY, width, height) ? 1 : 0;
 
     const buildPath = () => {
       if (path.length === length) {
@@ -128,6 +364,8 @@ function generateSelfAvoidingPath(width, height, length, random, maxAttempts = 2
       }
 
       const [currentX, currentY] = parse(path[path.length - 1]);
+      const prevKey = path.length >= 2 ? path[path.length - 2] : null;
+      const prevDelta = prevKey ? directionDeltaByKeys(prevKey, path[path.length - 1]) : null;
       const options = [];
       for (const [nextX, nextY] of neighbors(currentX, currentY, width, height)) {
         const nextKey = key(nextX, nextY);
@@ -141,17 +379,37 @@ function generateSelfAvoidingPath(width, height, length, random, maxAttempts = 2
             onwardCount += 1;
           }
         }
-        options.push({ key: nextKey, onwardCount });
+        const score = scorePathOption({
+          currentX,
+          currentY,
+          nextX,
+          nextY,
+          onwardCount,
+          width,
+          height,
+          profile,
+          prevDelta,
+          borderVisitedCount,
+          pathLength: path.length,
+          random,
+        });
+        options.push({ key: nextKey, nextX, nextY, score });
       }
 
-      shuffle(options, random);
-      options.sort((a, b) => b.onwardCount - a.onwardCount);
+      options.sort((a, b) => b.score - a.score);
 
       for (const option of options) {
+        const nextOnBorder = isBorderCell(option.nextX, option.nextY, width, height);
         visited.add(option.key);
         path.push(option.key);
+        if (nextOnBorder) {
+          borderVisitedCount += 1;
+        }
         if (buildPath()) {
           return true;
+        }
+        if (nextOnBorder) {
+          borderVisitedCount -= 1;
         }
         path.pop();
         visited.delete(option.key);
@@ -172,6 +430,8 @@ function getGraphStats(path, width, height) {
   const openSet = new Set(path);
   let edgeCount = 0;
   let branchNodes = 0;
+  let deadEnds = 0;
+  let corridorNodes = 0;
   for (const current of openSet) {
     const [x, y] = parse(current);
     let degree = 0;
@@ -179,6 +439,12 @@ function getGraphStats(path, width, height) {
       if (openSet.has(key(nextX, nextY))) {
         degree += 1;
       }
+    }
+    if (degree <= 1) {
+      deadEnds += 1;
+    }
+    if (degree === 2) {
+      corridorNodes += 1;
     }
     if (degree >= 3) {
       branchNodes += 1;
@@ -193,8 +459,114 @@ function getGraphStats(path, width, height) {
 
   return {
     branchNodes,
+    deadEnds,
+    corridorNodes,
+    branchingRatio: branchNodes / path.length,
+    corridorRatio: corridorNodes / path.length,
     extraEdges: edgeCount - (path.length - 1),
   };
+}
+
+function getPathShapeMetrics(path, width, height) {
+  if (path.length <= 1) {
+    return {
+      turnRatio: 0,
+      perimeterRatio: 1,
+      perimeterStepRatio: 1,
+      layerSwitchRatio: 0,
+      maxStraightRunRatio: 1,
+      maxMonotonicLayerRunRatio: 1,
+    };
+  }
+
+  let perimeterNodes = 0;
+  let perimeterSteps = 0;
+  let turns = 0;
+  let layerSwitches = 0;
+  let maxStraightRun = 1;
+  let currentStraightRun = 1;
+  let maxMonotonicLayerRun = 1;
+  let currentMonotonicLayerRun = 1;
+  let layerTrend = 0;
+
+  const layers = path.map((pathKey) => {
+    const [x, y] = parse(pathKey);
+    if (isBorderCell(x, y, width, height)) {
+      perimeterNodes += 1;
+    }
+    return borderDistance(x, y, width, height);
+  });
+
+  const directionList = [];
+  for (let index = 0; index < path.length - 1; index += 1) {
+    const [dx, dy] = directionDeltaByKeys(path[index], path[index + 1]);
+    directionList.push(`${dx},${dy}`);
+    const [fromX, fromY] = parse(path[index]);
+    const [toX, toY] = parse(path[index + 1]);
+    if (isBorderCell(fromX, fromY, width, height) && isBorderCell(toX, toY, width, height)) {
+      perimeterSteps += 1;
+    }
+
+    if (index >= 1 && directionList[index] !== directionList[index - 1]) {
+      turns += 1;
+      currentStraightRun = 1;
+    } else if (index >= 1) {
+      currentStraightRun += 1;
+    }
+    maxStraightRun = Math.max(maxStraightRun, currentStraightRun);
+  }
+
+  for (let index = 1; index < layers.length; index += 1) {
+    const delta = Math.sign(layers[index] - layers[index - 1]);
+    if (layers[index] !== layers[index - 1]) {
+      layerSwitches += 1;
+    }
+
+    if (delta === 0 || layerTrend === 0 || delta === layerTrend) {
+      currentMonotonicLayerRun += 1;
+      if (delta !== 0) {
+        layerTrend = delta;
+      }
+    } else {
+      currentMonotonicLayerRun = 2;
+      layerTrend = delta;
+    }
+    maxMonotonicLayerRun = Math.max(maxMonotonicLayerRun, currentMonotonicLayerRun);
+  }
+
+  const stepCount = path.length - 1;
+  return {
+    turnRatio: turns / Math.max(1, stepCount - 1),
+    perimeterRatio: perimeterNodes / path.length,
+    perimeterStepRatio: perimeterSteps / stepCount,
+    layerSwitchRatio: layerSwitches / stepCount,
+    maxStraightRunRatio: maxStraightRun / stepCount,
+    maxMonotonicLayerRunRatio: maxMonotonicLayerRun / path.length,
+  };
+}
+
+function quantize(value, step = 0.05) {
+  return Math.round(value / step) * step;
+}
+
+function getStartRegion(pathStartKey, width, height) {
+  const [x, y] = parse(pathStartKey);
+  const horizontal = x < width * 0.33 ? "L" : x > width * 0.66 ? "R" : "C";
+  const vertical = y < height * 0.33 ? "T" : y > height * 0.66 ? "B" : "C";
+  return `${horizontal}${vertical}`;
+}
+
+function buildVariationSignature({ width, height, openRatio, stats, pathMetrics, styleId, startKey }) {
+  return [
+    `${width}x${height}`,
+    styleId,
+    quantize(openRatio, 0.04).toFixed(2),
+    quantize(stats.branchingRatio, 0.04).toFixed(2),
+    quantize(pathMetrics.turnRatio, 0.04).toFixed(2),
+    quantize(pathMetrics.perimeterRatio, 0.04).toFixed(2),
+    quantize(pathMetrics.layerSwitchRatio, 0.04).toFixed(2),
+    getStartRegion(startKey, width, height),
+  ].join("|");
 }
 
 function toDirections(path) {
@@ -274,28 +646,90 @@ function makeLevelName(difficulty, indexInDifficulty) {
 function generateCampaignLevels(seed) {
   const random = createRng(hashStringToSeed(seed));
   const levels = [];
+  const seenSignaturesByDifficulty = new Map(
+    DIFFICULTY_SPECS.map((spec) => [spec.id, new Map()]),
+  );
   let globalIndex = 1;
 
   for (const spec of DIFFICULTY_SPECS) {
+    const signatureCounts = seenSignaturesByDifficulty.get(spec.id);
     console.log(`Generating ${spec.count} levels for ${spec.id}...`);
     for (let difficultyIndex = 1; difficultyIndex <= spec.count; difficultyIndex += 1) {
       let level = null;
-      for (let attempt = 0; attempt < 650 && level === null; attempt += 1) {
+      for (let attempt = 0; attempt < 1450 && level === null; attempt += 1) {
         const [width, height] = spec.sizes[Math.floor(random() * spec.sizes.length)];
         const maxOpen = Math.min(spec.openRange[1], width * height);
         const minOpen = Math.min(spec.openRange[0], maxOpen);
         const openCount = minOpen + Math.floor(random() * (maxOpen - minOpen + 1));
+        const openRatio = openCount / (width * height);
 
-        const path = generateSelfAvoidingPath(width, height, openCount, random);
+        if (openRatio < (spec.minOpenRatio ?? 0)) {
+          continue;
+        }
+
+        const pathProfile = pickPathProfile(spec, random, difficultyIndex, attempt);
+        const path = generateSelfAvoidingPath(width, height, openCount, random, pathProfile);
         if (!path) {
           continue;
         }
 
         const stats = getGraphStats(path, width, height);
-        const strictFilterSatisfied =
-          stats.extraEdges >= spec.minExtraEdges && stats.branchNodes >= spec.minBranchNodes;
-        const fallbackFilterSatisfied = attempt > 420;
-        if (!strictFilterSatisfied && !fallbackFilterSatisfied) {
+        const pathMetrics = getPathShapeMetrics(path, width, height);
+        const strictness = attempt < 820 ? 1 : attempt < 1150 ? 0.78 : 0.55;
+        const requiredExtraEdges = Math.floor(spec.minExtraEdges * strictness);
+        const requiredBranchNodes = Math.floor(spec.minBranchNodes * strictness);
+        const requiredBranchingRatio = (spec.minBranchingRatio ?? 0) * strictness;
+        const requiredTurnRatio = (spec.minTurnRatio ?? 0) * strictness;
+        const requiredLayerSwitchRatio = (spec.minLayerSwitchRatio ?? 0) * strictness;
+        const allowedCorridorRatio =
+          spec.maxCorridorRatio == null
+            ? 1
+            : spec.maxCorridorRatio + (1 - strictness) * (1 - spec.maxCorridorRatio);
+        const allowedDeadEnds =
+          spec.maxDeadEnds == null
+            ? Number.POSITIVE_INFINITY
+            : Math.ceil(spec.maxDeadEnds + (1 - strictness) * 3);
+        const allowedPerimeterRatio =
+          spec.maxPerimeterRatio == null
+            ? 1
+            : clamp(spec.maxPerimeterRatio + (1 - strictness) * 0.24, 0, 1);
+        const allowedMonotonicLayerRunRatio =
+          spec.maxMonotonicLayerRunRatio == null
+            ? 1
+            : clamp(spec.maxMonotonicLayerRunRatio + (1 - strictness) * 0.28, 0, 1);
+        const allowedStraightRunRatio =
+          spec.maxStraightRunRatio == null
+            ? 1
+            : clamp(spec.maxStraightRunRatio + (1 - strictness) * 0.22, 0, 1);
+
+        const qualityFilterSatisfied =
+          stats.extraEdges >= requiredExtraEdges &&
+          stats.branchNodes >= requiredBranchNodes &&
+          stats.branchingRatio >= requiredBranchingRatio &&
+          stats.corridorRatio <= allowedCorridorRatio &&
+          stats.deadEnds <= allowedDeadEnds &&
+          pathMetrics.turnRatio >= requiredTurnRatio &&
+          pathMetrics.layerSwitchRatio >= requiredLayerSwitchRatio &&
+          pathMetrics.perimeterRatio <= allowedPerimeterRatio &&
+          pathMetrics.maxMonotonicLayerRunRatio <= allowedMonotonicLayerRunRatio &&
+          pathMetrics.maxStraightRunRatio <= allowedStraightRunRatio;
+
+        if (!qualityFilterSatisfied) {
+          continue;
+        }
+
+        const variationSignature = buildVariationSignature({
+          width,
+          height,
+          openRatio,
+          stats,
+          pathMetrics,
+          styleId: pathProfile.id,
+          startKey: path[0],
+        });
+        const signatureCount = signatureCounts.get(variationSignature) ?? 0;
+        const allowedSignatureReuse = attempt < 900 ? 0 : attempt < 1220 ? 1 : 2;
+        if (signatureCount > allowedSignatureReuse) {
           continue;
         }
 
@@ -325,7 +759,21 @@ function generateCampaignLevels(seed) {
           solution: toDirections(path),
           branchNodes: stats.branchNodes,
           extraEdges: stats.extraEdges,
+          deadEnds: stats.deadEnds,
+          corridorNodes: stats.corridorNodes,
+          branchingRatio: Number(stats.branchingRatio.toFixed(4)),
+          corridorRatio: Number(stats.corridorRatio.toFixed(4)),
+          openRatio: Number(openRatio.toFixed(4)),
+          pathStyle: pathProfile.id,
+          turnRatio: Number(pathMetrics.turnRatio.toFixed(4)),
+          perimeterRatio: Number(pathMetrics.perimeterRatio.toFixed(4)),
+          perimeterStepRatio: Number(pathMetrics.perimeterStepRatio.toFixed(4)),
+          layerSwitchRatio: Number(pathMetrics.layerSwitchRatio.toFixed(4)),
+          maxStraightRunRatio: Number(pathMetrics.maxStraightRunRatio.toFixed(4)),
+          maxMonotonicLayerRunRatio: Number(pathMetrics.maxMonotonicLayerRunRatio.toFixed(4)),
         };
+
+        signatureCounts.set(variationSignature, signatureCount + 1);
       }
 
       if (!level) {

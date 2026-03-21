@@ -26,113 +26,181 @@
           </p>
         </header>
 
-        <section class="stats" aria-label="Spelstatus">
-          <article class="stat-card">
-            <span class="label">Nivå</span>
-            <strong id="levelLabel">1 / 200</strong>
-          </article>
-          <article class="stat-card">
-            <span class="label">Svårighet</span>
-            <strong id="difficultyLabel">Easy</strong>
-          </article>
-          <article class="stat-card">
-            <span class="label">Kampanj</span>
-            <strong id="campaignProgressLabel">0 klara</strong>
-          </article>
-          <article class="stat-card">
-            <span class="label">Besökta</span>
-            <strong id="visitedLabel">1</strong>
-          </article>
-          <article class="stat-card">
-            <span class="label">Kvar</span>
-            <strong id="remainingLabel">0</strong>
-          </article>
-          <article class="stat-card">
-            <span class="label">Status</span>
-            <strong id="phaseLabel">Spelar</strong>
-          </article>
-        </section>
+        <nav class="hub-menu" role="tablist" aria-label="Huvudmeny">
+          <button id="campaignModeBtn" type="button" class="active">Single-player</button>
+          <button id="challengeModeBtn" type="button">Multiplayer</button>
+          <button id="highScoreMenuBtn" type="button">High-score</button>
+          <button id="achievementMenuBtn" type="button">Achievement</button>
+          <button id="creditsMenuBtn" type="button">Credit</button>
+        </nav>
 
-        <div id="statusBox" class="status-box" role="status" aria-live="polite">
-          Dra från startnoden till en granne för att börja.
-        </div>
-
-        <div class="mode-switch" role="tablist" aria-label="Spelläge">
-          <button id="campaignModeBtn" type="button" class="active">Kampanj</button>
-          <button id="challengeModeBtn" type="button">Challenge</button>
-        </div>
-
-        <div class="button-row">
-          <button id="undoBtn" type="button">Ångra</button>
-          <button id="resetBtn" type="button">Starta om</button>
-          <button id="nextBtn" type="button" class="primary">Nästa nivå</button>
-        </div>
-
-        <section class="panel-inset">
-          <h2>Regler</h2>
-          <p>Fri slutnod. Ingen specifik målcell krävs.</p>
-          <p>Endast ortogonala steg.</p>
-          <p>Strikt undo via Ångra.</p>
-        </section>
-
-        <section class="panel-inset">
-          <h2>Nivåer</h2>
-          <div id="levelList" class="level-list" role="list"></div>
-        </section>
-
-        <section class="panel-inset challenge-panel">
-          <h2>Challenge Mix (10)</h2>
-          <div class="challenge-controls">
-            <input
-              id="challengeSeedInput"
-              type="text"
-              maxlength="64"
-              placeholder="seed-123"
-              aria-label="Challenge seed"
-            />
-            <button id="challengeGenerateBtn" type="button">Skapa Mix</button>
-          </div>
-          <p id="challengeMeta" class="challenge-meta">Ingen aktiv challenge.</p>
-          <div id="challengeList" class="challenge-list" role="list"></div>
-        </section>
-
-        <section class="panel-inset challenge-results-panel">
-          <h2>Challenge Resultat</h2>
-          <div class="challenge-totals">
-            <article class="mini-stat">
-              <span class="label">Poäng</span>
-              <strong id="challengeScoreLabel">0</strong>
+        <div id="playSidebar" class="play-sidebar">
+          <section class="stats" aria-label="Spelstatus">
+            <article class="stat-card">
+              <span class="label">Nivå</span>
+              <strong id="levelLabel">1 / 200</strong>
             </article>
-            <article class="mini-stat">
-              <span class="label">Total Tid</span>
-              <strong id="challengeTimeLabel">0:00</strong>
+            <article class="stat-card">
+              <span class="label">Svårighet</span>
+              <strong id="difficultyLabel">Easy</strong>
             </article>
-            <article class="mini-stat">
-              <span class="label">Klara</span>
-              <strong id="challengeCompletedLabel">0 / 10</strong>
+            <article class="stat-card">
+              <span class="label">Kampanj</span>
+              <strong id="campaignProgressLabel">0 klara</strong>
             </article>
+            <article class="stat-card">
+              <span class="label">Besökta</span>
+              <strong id="visitedLabel">1</strong>
+            </article>
+            <article class="stat-card">
+              <span class="label">Kvar</span>
+              <strong id="remainingLabel">0</strong>
+            </article>
+            <article class="stat-card">
+              <span class="label">Status</span>
+              <strong id="phaseLabel">Spelar</strong>
+            </article>
+          </section>
+
+          <div id="statusBox" class="status-box" role="status" aria-live="polite">
+            Dra från startnoden till en granne. Dra bakåt för att ångra.
           </div>
-          <div id="challengeSplitList" class="challenge-split-list" role="list"></div>
-          <div class="challenge-export-row">
-            <button id="copyChallengeSummaryBtn" type="button">Kopiera Summary</button>
-            <button id="exportChallengeSummaryBtn" type="button">Exportera JSON</button>
+
+          <div class="button-row">
+            <button id="undoBtn" type="button">Ångra</button>
+            <button id="resetBtn" type="button">Starta om</button>
+            <button id="hintBtn" type="button" class="hint-btn">Hint</button>
+            <button id="nextBtn" type="button" class="primary">Nästa nivå</button>
           </div>
-        </section>
+
+          <section class="panel-inset">
+            <h2>Regler</h2>
+            <p>Fri slutnod. Ingen specifik målcell krävs.</p>
+            <p>Endast ortogonala steg.</p>
+            <p>Backtracking endast ett steg bakåt längs vägen (dra bakåt eller Ångra).</p>
+            <p>Hint visar nästa rekommenderade nod (utmaningsläge ger poängstraff).</p>
+          </section>
+
+          <section id="singlePlayerLevelSection" class="panel-inset">
+            <h2>Nivåer</h2>
+            <div class="level-section-actions">
+              <button id="openLevelSelectBtn" type="button" class="level-select-open-btn">
+                Full Level Select
+              </button>
+            </div>
+            <div id="levelList" class="level-list" role="list"></div>
+          </section>
+
+          <div id="multiplayerPanels">
+            <section class="panel-inset challenge-panel">
+              <h2>Challenge Mix (10)</h2>
+              <div class="challenge-controls">
+                <input
+                  id="challengeSeedInput"
+                  type="text"
+                  maxlength="64"
+                  placeholder="seed-123"
+                  aria-label="Challenge seed"
+                />
+                <button id="challengeGenerateBtn" type="button">Skapa Mix</button>
+              </div>
+              <p id="challengeMeta" class="challenge-meta">Ingen aktiv challenge.</p>
+              <div id="challengeList" class="challenge-list" role="list"></div>
+            </section>
+
+            <section class="panel-inset challenge-results-panel">
+              <h2>Challenge Resultat</h2>
+              <div class="challenge-totals">
+                <article class="mini-stat">
+                  <span class="label">Poäng</span>
+                  <strong id="challengeScoreLabel">0</strong>
+                </article>
+                <article class="mini-stat">
+                  <span class="label">Total Tid</span>
+                  <strong id="challengeTimeLabel">0:00</strong>
+                </article>
+                <article class="mini-stat">
+                  <span class="label">Klara</span>
+                  <strong id="challengeCompletedLabel">0 / 10</strong>
+                </article>
+              </div>
+              <div id="challengeSplitList" class="challenge-split-list" role="list"></div>
+              <div class="challenge-export-row">
+                <button id="copyChallengeSummaryBtn" type="button">Kopiera Summary</button>
+                <button id="exportChallengeSummaryBtn" type="button">Exportera JSON</button>
+              </div>
+            </section>
+          </div>
+        </div>
       </aside>
 
       <section class="panel board-panel">
-        <div class="board-head">
-          <div>
-            <p class="eyebrow">Desktop-first, mobilvänligt</p>
-            <h2 id="levelName">Nivå 1</h2>
+        <div id="gameplayView">
+          <div class="board-head">
+            <div>
+              <p id="boardModeLabel" class="eyebrow">Single-player · Kampanj</p>
+              <h2 id="levelName">Nivå 1</h2>
+            </div>
+            <p class="board-help">Dra från senaste noden. Dra bakåt längs vägen för snabb ångra.</p>
           </div>
-          <p class="board-help">Dra från senaste noden med mus eller finger.</p>
+          <div class="board-stage">
+            <div class="stage-corners" aria-hidden="true">
+              <span></span><span></span><span></span><span></span>
+            </div>
+            <div id="board" class="board" aria-label="Spelplan"></div>
+          </div>
         </div>
-        <div class="board-stage">
-          <div class="stage-corners" aria-hidden="true">
-            <span></span><span></span><span></span><span></span>
-          </div>
-          <div id="board" class="board" aria-label="Spelplan"></div>
+
+        <div id="hubInfoView" class="hub-info-view" hidden>
+          <section id="highScoreView" class="hub-pane" hidden>
+            <header class="hub-pane-head">
+              <p class="eyebrow">Historik & statistik</p>
+              <h2>High-score</h2>
+              <p>Lokalt sparade challenge-runs och dina bästa siffror.</p>
+            </header>
+            <div class="hub-mini-grid">
+              <article class="hub-mini-card">
+                <span class="label">Bästa Challenge</span>
+                <strong id="highScoreBestChallengeScore">0</strong>
+              </article>
+              <article class="hub-mini-card">
+                <span class="label">Snabbaste Challenge</span>
+                <strong id="highScoreBestChallengeTime">--</strong>
+              </article>
+              <article class="hub-mini-card">
+                <span class="label">Kampanj lösta</span>
+                <strong id="highScoreCampaignSolved">0</strong>
+              </article>
+              <article class="hub-mini-card">
+                <span class="label">Runs i historik</span>
+                <strong id="highScoreRunCount">0</strong>
+              </article>
+            </div>
+            <div id="highScoreRunList" class="hub-list" role="list"></div>
+          </section>
+
+          <section id="achievementView" class="hub-pane" hidden>
+            <header class="hub-pane-head">
+              <p class="eyebrow">Progression</p>
+              <h2>Achievement</h2>
+              <p id="achievementSummary">Lås upp milstolpar i kampanj och challenge.</p>
+            </header>
+            <div id="achievementList" class="achievement-list" role="list"></div>
+          </section>
+
+          <section id="creditsView" class="hub-pane" hidden>
+            <header class="hub-pane-head">
+              <p class="eyebrow">Team</p>
+              <h2>Credit</h2>
+              <p>Byggt med kärlek till pussel.</p>
+            </header>
+            <article class="credits-card">
+              <h3>SmartProc Games</h3>
+              <p>
+                Tack för att du spelar One Stroke. Målet är ett vasst logikspel med tydlig känsla i varje drag.
+              </p>
+            </article>
+          </section>
         </div>
       </section>
     </main>
@@ -145,6 +213,45 @@
           <button id="modalResetBtn" type="button">Spela om</button>
           <button id="modalNextBtn" type="button" class="primary">Nästa nivå</button>
         </div>
+      </div>
+    </div>
+
+    <div
+      id="levelSelectModal"
+      class="modal hidden level-select-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="levelSelectTitle"
+    >
+      <div class="modal-card level-select-card">
+        <div class="level-select-head">
+          <h2 id="levelSelectTitle">Level Select</h2>
+          <button id="levelSelectCloseBtn" type="button">Stäng</button>
+        </div>
+        <p id="levelSelectSummary" class="level-select-summary">Laddar nivåer...</p>
+        <div class="level-select-filters">
+          <input
+            id="levelSelectSearchInput"
+            type="search"
+            placeholder="Sök nivå, namn eller ID"
+            aria-label="Sök nivå"
+          />
+          <select id="levelSelectDifficultyFilter" aria-label="Filtrera svårighet">
+            <option value="all">Alla svårigheter</option>
+            <option value="easy">Easy</option>
+            <option value="medium">Medium</option>
+            <option value="hard">Hard</option>
+            <option value="very-hard">Very Hard</option>
+          </select>
+          <select id="levelSelectStatusFilter" aria-label="Filtrera status">
+            <option value="all">Alla statusar</option>
+            <option value="solved">Klara</option>
+            <option value="unsolved">Oklara (upplåsta)</option>
+            <option value="unlocked">Upplåsta</option>
+            <option value="locked">Låsta</option>
+          </select>
+        </div>
+        <div id="levelSelectGrid" class="level-select-grid" role="list"></div>
       </div>
     </div>
 
