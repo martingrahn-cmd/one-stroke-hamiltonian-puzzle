@@ -67,10 +67,10 @@
           </div>
 
           <div class="button-row">
-            <button id="undoBtn" type="button">Ångra</button>
-            <button id="resetBtn" type="button">Starta om</button>
-            <button id="hintBtn" type="button" class="hint-btn">Hint</button>
-            <button id="nextBtn" type="button" class="primary">Nästa nivå</button>
+            <button id="undoBtn" type="button">Ångra <kbd>Z</kbd></button>
+            <button id="resetBtn" type="button">Starta om <kbd>R</kbd></button>
+            <button id="hintBtn" type="button" class="hint-btn">Hint <kbd>H</kbd></button>
+            <button id="nextBtn" type="button" class="primary">Nästa <kbd>N</kbd></button>
           </div>
 
           <section class="panel-inset">
@@ -130,6 +130,22 @@
                 <button id="exportChallengeSummaryBtn" type="button">Exportera JSON</button>
               </div>
             </section>
+
+            <section class="panel-inset match-panel">
+              <h2>Match (1v1)</h2>
+              <p class="match-description">Spela samma 10 banor som en vän och jämför resultat.</p>
+              <div class="match-controls">
+                <button id="exportMatchBtn" type="button">Kopiera matchkod</button>
+                <button id="importMatchBtn" type="button">Importera matchkod</button>
+              </div>
+              <p id="matchStatusLabel" class="match-status-label">Ingen aktiv match.</p>
+              <div id="matchStandingsView" class="match-standings" hidden>
+                <h3>Standings</h3>
+                <div id="matchStandingsList" class="match-standings-list" role="list"></div>
+                <h3>Per bana</h3>
+                <div id="matchLevelComparison" class="match-level-comparison" role="list"></div>
+              </div>
+            </section>
           </div>
         </div>
       </aside>
@@ -141,7 +157,10 @@
               <p id="boardModeLabel" class="eyebrow">Single-player · Kampanj</p>
               <h2 id="levelName">Nivå 1</h2>
             </div>
-            <p class="board-help">Dra från senaste noden. Dra bakåt längs vägen för snabb ångra.</p>
+            <div class="board-live-stats">
+              <span id="liveTimer" class="live-stat" aria-label="Tid">0:00</span>
+              <span id="liveMoves" class="live-stat" aria-label="Drag">0 drag</span>
+            </div>
           </div>
           <div class="board-stage">
             <div class="stage-corners" aria-hidden="true">
@@ -258,6 +277,30 @@
         </div>
       </section>
     </main>
+
+    <div
+      id="matchImportModal"
+      class="modal hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="matchImportTitle"
+    >
+      <div class="modal-card match-import-card">
+        <h2 id="matchImportTitle">Importera matchkod</h2>
+        <p>Klistra in matchkoden du fått från din motståndare.</p>
+        <textarea
+          id="matchImportTextarea"
+          class="match-import-textarea"
+          rows="8"
+          placeholder='Klistra in JSON här...'
+          aria-label="Matchkod JSON"
+        ></textarea>
+        <div class="button-row">
+          <button id="matchImportCancelBtn" type="button">Avbryt</button>
+          <button id="matchImportConfirmBtn" type="button" class="primary">Importera & Spela</button>
+        </div>
+      </div>
+    </div>
 
     <div id="winModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="winTitle">
       <div class="modal-card">

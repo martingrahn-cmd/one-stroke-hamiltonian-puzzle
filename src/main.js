@@ -1,3 +1,6 @@
 import { OneStrokeApp } from "./game/app.js";
 
-new OneStrokeApp();
+const app = new OneStrokeApp();
+
+// Expose for devtools debugging
+window.__oneStroke = app;

@@ -1,8 +1,16 @@
 import {
-  CAMPAIGN_LEVELS,
-  CAMPAIGN_TOTAL_LEVELS,
+  CAMPAIGN_LEVELS as GENERATED_LEVELS,
+  CAMPAIGN_TOTAL_LEVELS as GENERATED_TOTAL,
 } from "../data/campaign-levels.js";
 import { DIFFICULTY_META, DIFFICULTY_ORDER } from "../data/difficulty.js";
+import { TUTORIAL_LEVELS } from "../data/tutorial-levels.js";
+
+// Replace first N generated levels with hand-crafted tutorials.
+const CAMPAIGN_LEVELS = [
+  ...TUTORIAL_LEVELS,
+  ...GENERATED_LEVELS.slice(TUTORIAL_LEVELS.length),
+];
+const CAMPAIGN_TOTAL_LEVELS = CAMPAIGN_LEVELS.length;
 import {
   coordKey,
   directionBetweenKeys,
@@ -14,6 +22,16 @@ import {
   parseKey,
 } from "../core/grid.js";
 import { validateCampaignLevels } from "../core/level-integrity.js";
+import {
+  createMatch,
+  addPlayerToMatch,
+  logMatchEvent,
+  getMatchStandings,
+  getLevelComparison,
+  serializeMatch,
+  validateMatchStructure,
+} from "../core/match.js";
+import { checkRunResult } from "../core/plausibility.js";
 import { createMixedChallenge } from "./challenge-pool.js";
 import {
   loadAchievementUnlocks,
@@ -25,6 +43,7 @@ import {
 } from "./storage.js";
 
 const LEVEL_FORMAT_VERSION = 2;
+const LOCAL_PLAYER_ID = "local-player";
 const CHALLENGE_DIFFICULTY_MULTIPLIER = {
   easy: 1,
   medium: 1.25,
@@ -384,6 +403,8 @@ export class OneStrokeApp {
 
     this.boardEl = document.getElementById("board");
     this.boardStageEl = this.boardEl?.closest(".board-stage") ?? null;
+    this.liveTimerEl = document.getElementById("liveTimer");
+    this.liveMovesEl = document.getElementById("liveMoves");
     this.levelNameEl = document.getElementById("levelName");
     this.levelLabelEl = document.getElementById("levelLabel");
     this.difficultyLabelEl = document.getElementById("difficultyLabel");
@@ -448,10 +469,21 @@ export class OneStrokeApp {
     this.levelSelectDifficultyFilter = document.getElementById("levelSelectDifficultyFilter");
     this.levelSelectStatusFilter = document.getElementById("levelSelectStatusFilter");
     this.levelSelectGridEl = document.getElementById("levelSelectGrid");
+    this.exportMatchBtn = document.getElementById("exportMatchBtn");
+    this.importMatchBtn = document.getElementById("importMatchBtn");
+    this.matchStatusLabelEl = document.getElementById("matchStatusLabel");
+    this.matchStandingsViewEl = document.getElementById("matchStandingsView");
+    this.matchStandingsListEl = document.getElementById("matchStandingsList");
+    this.matchLevelComparisonEl = document.getElementById("matchLevelComparison");
+    this.matchImportModalEl = document.getElementById("matchImportModal");
+    this.matchImportTextarea = document.getElementById("matchImportTextarea");
+    this.matchImportCancelBtn = document.getElementById("matchImportCancelBtn");
+    this.matchImportConfirmBtn = document.getElementById("matchImportConfirmBtn");
 
     this.cells = new Map();
     this.levelButtons = [];
     this.invalidTimer = null;
+    this.liveTimerInterval = null;
     this.drag = {
       active: false,
       pointerId: null,
@@ -482,6 +514,7 @@ export class OneStrokeApp {
       startedAtMs: Date.now(),
       saved: false,
     };
+    this.activeMatch = null;
 
     this.levelAttempt = {
       startedAtMs: Date.now(),
@@ -543,7 +576,7 @@ export class OneStrokeApp {
     this.nextBtn.addEventListener("click", () => this.goToNextLevel());
     this.modalResetBtn.addEventListener("click", () => {
       this.hideModal();
-      this.resetLevel();
+      this.replayLevel();
     });
     this.modalNextBtn.addEventListener("click", () => {
       this.hideModal();
@@ -565,6 +598,15 @@ export class OneStrokeApp {
     });
     this.copyChallengeSummaryBtn?.addEventListener("click", () => this.copyChallengeSummary());
     this.exportChallengeSummaryBtn?.addEventListener("click", () => this.exportChallengeSummary());
+    this.exportMatchBtn?.addEventListener("click", () => this.exportMatchCode());
+    this.importMatchBtn?.addEventListener("click", () => this.openMatchImport());
+    this.matchImportCancelBtn?.addEventListener("click", () => this.closeMatchImport());
+    this.matchImportConfirmBtn?.addEventListener("click", () => this.confirmMatchImport());
+    this.matchImportModalEl?.addEventListener("click", (event) => {
+      if (event.target === this.matchImportModalEl) {
+        this.closeMatchImport();
+      }
+    });
     this.openLevelSelectBtn?.addEventListener("click", () => this.openLevelSelect());
     this.levelSelectCloseBtn?.addEventListener("click", () => this.closeLevelSelect());
     this.levelSelectModalEl?.addEventListener("click", (event) => {
@@ -630,6 +672,18 @@ export class OneStrokeApp {
       startedAtMs: Date.now(),
       saved: false,
     };
+
+    // Create match object for this challenge run
+    try {
+      this.activeMatch = createMatch({
+        seed: challenge.seed,
+        levels: challenge.levels,
+      });
+      addPlayerToMatch(this.activeMatch, LOCAL_PLAYER_ID);
+    } catch {
+      this.activeMatch = null;
+    }
+
     if (this.challengeSeedInput) {
       this.challengeSeedInput.value = challenge.seed;
     }
@@ -834,6 +888,7 @@ export class OneStrokeApp {
         completedCount: Number(summary.completedCount) || 0,
         totalLevels: Number(summary.totalLevels) || 0,
         completionRate: Number(completionRate.toFixed(6)),
+        matchId: this.activeMatch?.matchId ?? null,
       },
       totals: {
         score: Number(summary.totalScore) || 0,
@@ -995,6 +1050,9 @@ export class OneStrokeApp {
       this.renderHighScoreView();
     } else if (this.hubView === "achievement") {
       this.renderAchievementView();
+    }
+    if (this.hubView === "multiplayer") {
+      this.renderMatchPanel();
     }
   }
 
@@ -1795,6 +1853,12 @@ export class OneStrokeApp {
 
     this.state.mode = "challenge";
     this.challenge.cursor = clamped;
+    this.logChallengeEvent({
+      type: "level-start",
+      levelIndex: clamped + 1,
+      levelId: level.id,
+      attemptNumber: (this.levelAttempt?.resetCount ?? 0) + 1,
+    });
     this.loadLevel(level, clamped, announce);
   }
 
@@ -1817,10 +1881,12 @@ export class OneStrokeApp {
 
     this.buildBoard();
     this.hideModal();
+    this.boardEl.classList.remove("board-lost");
     this.renderState();
     this.renderModeButtons();
     this.renderChallengePanel();
     this.renderHubPanels();
+    this.startLiveTimer();
 
     if (announce) {
       const modePrefix =
@@ -1902,6 +1968,7 @@ export class OneStrokeApp {
     this.phaseLabelEl.textContent = this.getPhaseLabel(status);
     this.renderBoardModeLabel();
 
+    this.updateLiveStats();
     this.renderCampaignMeta();
     this.renderLevelButtons();
     this.updateNextButton();
@@ -2001,40 +2068,195 @@ export class OneStrokeApp {
     }
 
     const hint = this.findHintTarget();
-    if (!hint) {
-      this.flashInvalid("Ingen säker hint hittades här. Testa Ångra eller Starta om.");
+    const penaltyText =
+      this.state.mode === "challenge" ? ` (-${toDisplayScore(CHALLENGE_HINT_PENALTY)} p)` : " (sparas i statistik)";
+
+    if (hint.type === "next") {
+      const isNewHint = this.activeHintKey !== hint.key;
+      this.activeHintKey = hint.key;
+      if (isNewHint) {
+        this.levelAttempt.hintCount += 1;
+      }
+      this.renderState();
+      const [x, y] = parseKey(hint.key);
+      this.setStatus(`Hint: prova nod ${x + 1},${y + 1}.${penaltyText}`);
       return;
     }
 
-    const isNewHint = this.activeHintKey !== hint.key;
-    this.activeHintKey = hint.key;
-    if (isNewHint) {
+    if (hint.type === "backtrack") {
+      this.activeHintKey = null;
       this.levelAttempt.hintCount += 1;
+      this.renderState();
+      const stepsBack = hint.stepsBack;
+      this.setStatusWithActions(
+        `Ingen lösning härifrån. Backa ${stepsBack} steg.${penaltyText}`,
+        "loss",
+        [{ label: `Backa ${stepsBack} steg`, action: () => this.backtrackMultiple(stepsBack) }],
+      );
+      return;
     }
 
+    this.activeHintKey = null;
     this.renderState();
-    const [x, y] = parseKey(hint.key);
-    const penaltyText =
-      this.state.mode === "challenge" ? ` (-${toDisplayScore(CHALLENGE_HINT_PENALTY)} p)` : " (sparas i statistik)";
-    this.setStatus(`Hint: prova nod ${x + 1},${y + 1}.${penaltyText}`);
+    this.flashInvalid("Ingen lösning hittades. Starta om banan.");
+  }
+
+  backtrackMultiple(steps) {
+    for (let i = 0; i < steps; i += 1) {
+      if (this.state.path.length <= 1) {
+        break;
+      }
+      this.levelAttempt.undoCount += 1;
+      const removedKey = this.state.path.pop();
+      this.state.visited.delete(removedKey);
+    }
+    this.state.status = "playing";
+    this.activeHintKey = null;
+    this.hideModal();
+    this.boardEl.classList.remove("board-lost");
+    this.renderState();
+    if (this.state.mode === "challenge") {
+      this.renderChallengeResults();
+    }
+    const remaining = this.state.playableCount - this.state.visited.size;
+    this.setStatus(`Backade ${steps} steg. ${remaining} noder kvar.`);
   }
 
   findHintTarget() {
+    // 1. If we're on the stored solution path, suggest the next step
     const fromSolution = this.getSolutionHintTarget();
     if (fromSolution) {
-      return {
-        key: fromSolution,
-        source: "solution",
-      };
+      return { type: "next", key: fromSolution, source: "solution" };
     }
-    const fromHeuristic = this.getHeuristicHintTarget();
-    if (fromHeuristic) {
-      return {
-        key: fromHeuristic,
-        source: "heuristic",
-      };
+
+    // 2. Try to solve from current position via DFS
+    const solverResult = this.solveFromCurrentPosition();
+    if (solverResult) {
+      return { type: "next", key: solverResult, source: "solver" };
+    }
+
+    // 3. No solution from here — find how far back we need to go
+    const stepsBack = this.findBacktrackDepth();
+    if (stepsBack > 0) {
+      return { type: "backtrack", stepsBack };
+    }
+
+    return { type: "dead" };
+  }
+
+  solveFromCurrentPosition() {
+    const level = this.state.level;
+    const blockedSet = this.state.blockedSet;
+    const playableCount = this.state.playableCount;
+    const visited = new Set(this.state.visited);
+    const tailKey = this.getTailKey();
+
+    // DFS to find a complete Hamiltonian path from current state
+    const firstStep = this.dfsHamiltonianNextStep(level, blockedSet, playableCount, tailKey, visited);
+    return firstStep;
+  }
+
+  dfsHamiltonianNextStep(level, blockedSet, playableCount, startKey, visitedSet) {
+    // Returns the first step of a valid completion, or null
+    const neighbors = getNeighborKeys(level, blockedSet, startKey).filter(
+      (key) => !visitedSet.has(key),
+    );
+
+    for (const neighbor of neighbors) {
+      visitedSet.add(neighbor);
+      if (visitedSet.size === playableCount) {
+        visitedSet.delete(neighbor);
+        return neighbor;
+      }
+      if (this.dfsHamiltonianComplete(level, blockedSet, playableCount, neighbor, visitedSet)) {
+        visitedSet.delete(neighbor);
+        return neighbor;
+      }
+      visitedSet.delete(neighbor);
     }
     return null;
+  }
+
+  dfsHamiltonianComplete(level, blockedSet, playableCount, currentKey, visitedSet) {
+    if (visitedSet.size === playableCount) {
+      return true;
+    }
+
+    const neighbors = getNeighborKeys(level, blockedSet, currentKey).filter(
+      (key) => !visitedSet.has(key),
+    );
+
+    if (neighbors.length === 0) {
+      return false;
+    }
+
+    // Prune: check connectivity of unvisited nodes
+    const unvisitedKeys = [];
+    for (const cell of this.cells.keys()) {
+      if (!visitedSet.has(cell)) {
+        unvisitedKeys.push(cell);
+      }
+    }
+    if (unvisitedKeys.length > 0) {
+      const reachable = new Set();
+      const queue = [currentKey];
+      const allowed = new Set(unvisitedKeys);
+      allowed.add(currentKey);
+      reachable.add(currentKey);
+      while (queue.length > 0) {
+        const node = queue.pop();
+        for (const nb of getNeighborKeys(level, blockedSet, node)) {
+          if (allowed.has(nb) && !reachable.has(nb)) {
+            reachable.add(nb);
+            queue.push(nb);
+          }
+        }
+      }
+      if (reachable.size < allowed.size) {
+        return false;
+      }
+    }
+
+    // Warnsdorff heuristic: try neighbors with fewest onward options first
+    const scored = neighbors.map((key) => {
+      const onward = getNeighborKeys(level, blockedSet, key).filter(
+        (k) => !visitedSet.has(k),
+      ).length;
+      return { key, onward };
+    });
+    scored.sort((a, b) => a.onward - b.onward);
+
+    for (const { key } of scored) {
+      visitedSet.add(key);
+      if (this.dfsHamiltonianComplete(level, blockedSet, playableCount, key, visitedSet)) {
+        visitedSet.delete(key);
+        return true;
+      }
+      visitedSet.delete(key);
+    }
+
+    return false;
+  }
+
+  findBacktrackDepth() {
+    const level = this.state.level;
+    const blockedSet = this.state.blockedSet;
+    const playableCount = this.state.playableCount;
+    const pathCopy = [...this.state.path];
+    const visitedCopy = new Set(this.state.visited);
+
+    // Try backing up 1, 2, 3... steps until we find a solvable position
+    const maxBacktrack = pathCopy.length - 1; // can't remove the start node
+    for (let steps = 1; steps <= maxBacktrack; steps += 1) {
+      const removedKey = pathCopy.pop();
+      visitedCopy.delete(removedKey);
+      const tailKey = pathCopy[pathCopy.length - 1];
+      const nextStep = this.dfsHamiltonianNextStep(level, blockedSet, playableCount, tailKey, visitedCopy);
+      if (nextStep) {
+        return steps;
+      }
+    }
+    return 0;
   }
 
   getSolutionHintTarget() {
@@ -2088,36 +2310,6 @@ export class OneStrokeApp {
     }
     this.solutionPathCache.set(level.id, keys);
     return keys;
-  }
-
-  getHeuristicHintTarget() {
-    const tailKey = this.getTailKey();
-    const candidates = getNeighborKeys(this.state.level, this.state.blockedSet, tailKey).filter(
-      (key) => !this.state.visited.has(key),
-    );
-    if (candidates.length === 0) {
-      return null;
-    }
-
-    const viable = [];
-    for (const key of candidates) {
-      const simulatedVisited = new Set(this.state.visited);
-      simulatedVisited.add(key);
-      const deadReason = this.getDeadStateReasonFor(key, simulatedVisited);
-      if (!deadReason) {
-        const onwardOptions = getNeighborKeys(this.state.level, this.state.blockedSet, key).filter(
-          (neighbor) => !simulatedVisited.has(neighbor),
-        ).length;
-        viable.push({ key, onwardOptions });
-      }
-    }
-
-    if (viable.length === 0) {
-      return null;
-    }
-
-    viable.sort((a, b) => a.onwardOptions - b.onwardOptions);
-    return viable[0].key;
   }
 
   tryMoveByDirection(dx, dy) {
@@ -2191,12 +2383,17 @@ export class OneStrokeApp {
       return false;
     }
 
+    const wasLost = this.state.status === "lost";
     this.levelAttempt.undoCount += 1;
     const removedKey = this.state.path.pop();
     this.state.visited.delete(removedKey);
     this.state.status = "playing";
     this.activeHintKey = null;
     this.hideModal();
+    this.boardEl.classList.remove("board-lost");
+    if (wasLost) {
+      this.startLiveTimer();
+    }
     this.renderState();
     if (this.state.mode === "challenge") {
       this.renderChallengeResults();
@@ -2249,6 +2446,29 @@ export class OneStrokeApp {
     this.backtrackOneStep("undo");
   }
 
+  replayLevel() {
+    const startKey = coordKey(this.state.level.start[0], this.state.level.start[1]);
+    this.state.path = [startKey];
+    this.state.visited = new Set(this.state.path);
+    this.state.status = "playing";
+    this.activeHintKey = null;
+    this.levelAttempt = {
+      startedAtMs: Date.now(),
+      undoCount: 0,
+      resetCount: 0,
+      hintCount: 0,
+    };
+    this.stopDrag();
+    this.hideModal();
+    this.boardEl.classList.remove("board-lost");
+    this.renderState();
+    this.startLiveTimer();
+    if (this.state.mode === "challenge") {
+      this.renderChallengeResults();
+    }
+    this.setStatus("Nytt försök. Kör igen.");
+  }
+
   resetLevel() {
     this.levelAttempt.resetCount += 1;
     const startKey = coordKey(this.state.level.start[0], this.state.level.start[1]);
@@ -2258,7 +2478,9 @@ export class OneStrokeApp {
     this.activeHintKey = null;
     this.stopDrag();
     this.hideModal();
+    this.boardEl.classList.remove("board-lost");
     this.renderState();
+    this.startLiveTimer();
     if (this.state.mode === "challenge") {
       this.renderChallengeResults();
     }
@@ -2269,6 +2491,8 @@ export class OneStrokeApp {
     this.state.status = "won";
     this.activeHintKey = null;
     this.stopDrag();
+    this.stopLiveTimer();
+    this.updateLiveStats();
 
     const durationMs = Date.now() - this.levelAttempt.startedAtMs;
     const result = {
@@ -2279,7 +2503,14 @@ export class OneStrokeApp {
       completedAt: Date.now(),
     };
 
+    let pbTag = "";
     if (this.state.mode === "campaign") {
+      const previous = this.progress.solvedLevels[this.state.level.id];
+      if (!previous) {
+        pbTag = " · Första klaring!";
+      } else if (durationMs < previous.bestTimeMs) {
+        pbTag = ` · Nytt PB! (${toDisplayTime(previous.bestTimeMs)} → ${toDisplayTime(durationMs)})`;
+      }
       this.recordCampaignResult(this.state.level, result);
     } else {
       this.recordChallengeResult(this.state.level, result);
@@ -2295,8 +2526,8 @@ export class OneStrokeApp {
     if (this.state.mode === "campaign") {
       this.showModal(
         hasNext
-          ? `Kampanj klarad. ${timingText}. Nästa nivå är upplåst.`
-          : `Sista kampanjnivån klarad. ${timingText}.`,
+          ? `Kampanj klarad. ${timingText}${pbTag}. Nästa nivå är upplåst.`
+          : `Sista kampanjnivån klarad. ${timingText}${pbTag}.`,
         hasNext,
       );
     } else {
@@ -2350,6 +2581,22 @@ export class OneStrokeApp {
     this.challenge.resultsByLevelId[level.id] = {
       ...result,
     };
+
+    const summary = this.getChallengeSummary();
+    const split = summary.splits.find((s) => s.levelId === level.id);
+    this.logChallengeEvent({
+      type: "level-finish",
+      levelIndex: this.challenge.cursor + 1,
+      levelId: level.id,
+      durationMs: result.durationMs,
+      undoCount: result.undoCount,
+      resetCount: result.resetCount,
+      hintCount: result.hintCount,
+      moveCount: this.state.level.par,
+      score: split?.score ?? 0,
+      firstAttempt: result.resetCount === 0,
+    });
+
     if (this.isCurrentChallengeCompleted() && !this.challengeRunMeta.saved) {
       this.archiveCompletedChallengeRun();
     } else {
@@ -2364,6 +2611,18 @@ export class OneStrokeApp {
     return Object.keys(this.challenge.resultsByLevelId).length >= this.challenge.levels.length;
   }
 
+  logChallengeEvent(event) {
+    if (!this.activeMatch) {
+      return;
+    }
+    try {
+      const entry = logMatchEvent(this.activeMatch, LOCAL_PLAYER_ID, event);
+      console.log(`[match] ${event.type}`, entry);
+    } catch {
+      // Match logging is best-effort; don't break gameplay.
+    }
+  }
+
   archiveCompletedChallengeRun() {
     const summary = this.getChallengeSummary();
     if (summary.completedCount === 0) {
@@ -2372,6 +2631,19 @@ export class OneStrokeApp {
 
     const totals = this.getChallengeActionTotals(summary.splits);
     const runId = this.challengeRunMeta.runId || createRunId();
+
+    // Run plausibility check before archiving
+    const plausibility = checkRunResult({
+      totalTimeMs: summary.totalTimeMs,
+      completedCount: summary.completedCount,
+      totalLevels: summary.totalLevels,
+      splits: summary.splits,
+    });
+    console.log("[match] plausibility check:", plausibility);
+    if (this.activeMatch) {
+      console.log("[match] final match object:", serializeMatch(this.activeMatch));
+      console.log("[match] standings:", getMatchStandings(this.activeMatch));
+    }
 
     const entry = {
       id: runId,
@@ -2387,6 +2659,8 @@ export class OneStrokeApp {
       resetCount: totals.resetCount,
       hintCount: totals.hintCount,
       splits: summary.splits,
+      plausible: plausibility.ok,
+      matchId: this.activeMatch?.matchId ?? null,
     };
 
     this.challengeRunHistory = [entry, ...this.challengeRunHistory].slice(0, CHALLENGE_HISTORY_LIMIT);
@@ -2399,8 +2673,15 @@ export class OneStrokeApp {
   handleLoss(reason) {
     this.state.status = "lost";
     this.stopDrag();
+    this.stopLiveTimer();
+    this.updateLiveStats();
     this.renderState();
-    this.setStatus(`Fastlåst läge: ${reason} Använd Ångra eller Starta om.`, "loss");
+    this.flashInvalidBoard();
+    this.boardEl.classList.add("board-lost");
+    this.setStatusWithActions(`Fastlåst: ${reason}`, "loss", [
+      { label: "Ångra (Z)", action: () => this.undo() },
+      { label: "Starta om (R)", action: () => this.resetLevel() },
+    ]);
   }
 
   getDeadStateReason() {
@@ -2548,10 +2829,290 @@ export class OneStrokeApp {
     }
   }
 
+  setStatusWithActions(message, tone, actions) {
+    this.statusBoxEl.textContent = "";
+    this.statusBoxEl.classList.remove("status-win", "status-loss");
+    if (tone === "loss") {
+      this.statusBoxEl.classList.add("status-loss");
+    } else if (tone === "win") {
+      this.statusBoxEl.classList.add("status-win");
+    }
+
+    const textNode = document.createElement("span");
+    textNode.textContent = message;
+    this.statusBoxEl.append(textNode);
+
+    const btnRow = document.createElement("span");
+    btnRow.className = "status-actions";
+    for (const { label, action } of actions) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "status-action-btn";
+      btn.textContent = label;
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        action();
+      });
+      btnRow.append(btn);
+    }
+    this.statusBoxEl.append(btnRow);
+  }
+
   showModal(text, showNext) {
     this.winTextEl.textContent = text;
     this.modalNextBtn.hidden = !showNext;
     this.winModalEl.classList.remove("hidden");
+  }
+
+  // ── Match (1v1) methods ──────────────────────────────────
+
+  async exportMatchCode() {
+    if (!this.activeMatch) {
+      this.setStatus("Skapa en challenge först.", "loss");
+      return;
+    }
+
+    const matchData = serializeMatch(this.activeMatch);
+    const json = JSON.stringify(matchData);
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(json);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = json;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.top = "-9999px";
+        document.body.append(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      this.setStatus("Matchkod kopierad! Skicka den till din motståndare.");
+    } catch {
+      this.setStatus("Kunde inte kopiera matchkoden.", "loss");
+    }
+  }
+
+  openMatchImport() {
+    if (!this.matchImportModalEl) {
+      return;
+    }
+    if (this.matchImportTextarea) {
+      this.matchImportTextarea.value = "";
+    }
+    this.matchImportModalEl.classList.remove("hidden");
+    window.requestAnimationFrame(() => {
+      this.matchImportTextarea?.focus();
+    });
+  }
+
+  closeMatchImport() {
+    this.matchImportModalEl?.classList.add("hidden");
+  }
+
+  confirmMatchImport() {
+    const raw = this.matchImportTextarea?.value?.trim();
+    if (!raw) {
+      this.setStatus("Klistra in en matchkod först.", "loss");
+      return;
+    }
+
+    let matchData;
+    try {
+      matchData = JSON.parse(raw);
+    } catch {
+      this.setStatus("Ogiltig JSON. Kontrollera matchkoden.", "loss");
+      return;
+    }
+
+    const validation = validateMatchStructure(matchData);
+    if (!validation.ok) {
+      this.setStatus(`Ogiltig matchkod: ${validation.reason}`, "loss");
+      return;
+    }
+
+    // Recreate the challenge from the match's seed and level list
+    const matchLevelIds = matchData.levels.map((l) => l.levelId);
+    const matchLevels = matchLevelIds
+      .map((id) => CAMPAIGN_LEVELS.find((l) => l.id === id))
+      .filter(Boolean);
+
+    if (matchLevels.length !== matchData.levels.length) {
+      this.setStatus("Matchkoden innehåller nivåer som saknas i din kampanjdata.", "loss");
+      return;
+    }
+
+    // Set up the challenge with the exact same levels
+    this.challenge = {
+      seed: matchData.seed,
+      levels: matchLevels,
+      cursor: 0,
+      resultsByLevelId: {},
+    };
+    this.challengeRunMeta = {
+      runId: createRunId(),
+      startedAtMs: Date.now(),
+      saved: false,
+    };
+
+    // Use the imported match object and add ourselves as a player
+    this.activeMatch = matchData;
+    try {
+      addPlayerToMatch(this.activeMatch, LOCAL_PLAYER_ID);
+    } catch {
+      // Already in match or expired — continue anyway for local play.
+    }
+
+    if (this.challengeSeedInput) {
+      this.challengeSeedInput.value = matchData.seed;
+    }
+
+    this.closeMatchImport();
+    this.setHubView("multiplayer");
+    this.loadChallengeLevel(0, { announce: true });
+    this.renderMatchPanel();
+    this.setStatus(`Match importerad! Seed: ${matchData.seed}. Spela alla 10 banor.`);
+  }
+
+  renderMatchPanel() {
+    if (!this.matchStatusLabelEl) {
+      return;
+    }
+
+    if (!this.activeMatch) {
+      this.matchStatusLabelEl.textContent = "Ingen aktiv match.";
+      if (this.matchStandingsViewEl) {
+        this.matchStandingsViewEl.hidden = true;
+      }
+      return;
+    }
+
+    const playerCount = Object.keys(this.activeMatch.players).length;
+    const localPlayer = this.activeMatch.players[LOCAL_PLAYER_ID];
+    const localStatus = localPlayer?.status === "finished" ? "klar" : "spelar";
+
+    this.matchStatusLabelEl.textContent =
+      `Match: ${this.activeMatch.matchId} · ${playerCount} spelare · Du: ${localStatus}`;
+
+    // Show standings if there are opponents with results
+    const hasOpponentData = playerCount > 1;
+    if (this.matchStandingsViewEl) {
+      this.matchStandingsViewEl.hidden = !hasOpponentData;
+    }
+
+    if (hasOpponentData) {
+      this.renderMatchStandings();
+      this.renderMatchLevelComparison();
+    }
+  }
+
+  renderMatchStandings() {
+    if (!this.matchStandingsListEl) {
+      return;
+    }
+
+    const standings = getMatchStandings(this.activeMatch);
+    this.matchStandingsListEl.innerHTML = "";
+
+    for (const entry of standings) {
+      const row = document.createElement("article");
+      row.className = "match-standing-row";
+      if (entry.playerId === LOCAL_PLAYER_ID) {
+        row.classList.add("is-you");
+      }
+
+      const rank = document.createElement("span");
+      rank.className = "match-standing-rank";
+      rank.textContent = `#${entry.rank}`;
+
+      const name = document.createElement("span");
+      name.className = "match-standing-name";
+      name.textContent = entry.playerId === LOCAL_PLAYER_ID ? "Du" : entry.playerId;
+
+      const score = document.createElement("span");
+      score.className = "match-standing-score";
+      score.textContent = `${toDisplayScore(entry.totalScore)} p`;
+
+      const meta = document.createElement("span");
+      meta.className = "match-standing-meta";
+      meta.textContent =
+        `${toDisplayTime(entry.totalTimeMs)} · ${entry.completedCount}/${this.activeMatch.levelCount} klara`;
+
+      row.append(rank, name, score, meta);
+      this.matchStandingsListEl.append(row);
+    }
+  }
+
+  renderMatchLevelComparison() {
+    if (!this.matchLevelComparisonEl) {
+      return;
+    }
+
+    this.matchLevelComparisonEl.innerHTML = "";
+
+    for (const levelMeta of this.activeMatch.levels) {
+      const comparison = getLevelComparison(this.activeMatch, levelMeta.index);
+      if (comparison.length < 2) {
+        continue;
+      }
+
+      const row = document.createElement("article");
+      row.className = "match-level-row";
+
+      const header = document.createElement("div");
+      header.className = "match-level-header";
+      const diff = DIFFICULTY_META[levelMeta.difficulty];
+      header.textContent = `${levelMeta.index}. ${diff?.shortLabel ?? "?"} · ${levelMeta.levelName}`;
+
+      const playersDiv = document.createElement("div");
+      playersDiv.className = "match-level-players";
+
+      const bestScore = Math.max(...comparison.map((c) => c.score || 0));
+
+      for (const result of comparison) {
+        const playerSpan = document.createElement("span");
+        const displayName = result.playerId === LOCAL_PLAYER_ID ? "Du" : result.playerId;
+        if (result.durationMs !== null) {
+          playerSpan.textContent =
+            `${displayName}: ${toDisplayTime(result.durationMs)} · ${toDisplayScore(result.score)} p`;
+          if (result.score === bestScore && bestScore > 0) {
+            playerSpan.className = "match-level-winner";
+          }
+        } else {
+          playerSpan.textContent = `${displayName}: --`;
+        }
+        playersDiv.append(playerSpan);
+      }
+
+      row.append(header, playersDiv);
+      this.matchLevelComparisonEl.append(row);
+    }
+  }
+
+  startLiveTimer() {
+    this.stopLiveTimer();
+    this.updateLiveStats();
+    this.liveTimerInterval = window.setInterval(() => this.updateLiveStats(), 250);
+  }
+
+  stopLiveTimer() {
+    if (this.liveTimerInterval) {
+      window.clearInterval(this.liveTimerInterval);
+      this.liveTimerInterval = null;
+    }
+  }
+
+  updateLiveStats() {
+    if (this.liveTimerEl) {
+      const elapsed = Date.now() - this.levelAttempt.startedAtMs;
+      this.liveTimerEl.textContent = toDisplayTime(elapsed);
+    }
+    if (this.liveMovesEl) {
+      const moves = Math.max(0, this.state.path.length - 1);
+      this.liveMovesEl.textContent = `${moves} drag`;
+    }
   }
 
   hideModal() {
