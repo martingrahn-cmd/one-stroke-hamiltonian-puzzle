@@ -13,7 +13,7 @@ import { createRng, hashStringToSeed } from "./rng.js";
 const MATCH_SCHEMA_VERSION = 1;
 const MATCH_KIND = "one-stroke.match";
 const DEFAULT_WINDOW_HOURS = 72;
-const LEVELS_PER_MATCH = 10;
+const ALLOWED_LEVEL_COUNTS = new Set([3, 5, 10]);
 
 // ── Match creation ──────────────────────────────────────────
 
@@ -28,8 +28,11 @@ export function createMatch(options = {}) {
   if (!seed || typeof seed !== "string") {
     throw new Error("Match requires a non-empty seed string.");
   }
-  if (!Array.isArray(levels) || levels.length !== LEVELS_PER_MATCH) {
-    throw new Error(`Match requires exactly ${LEVELS_PER_MATCH} levels.`);
+  if (!Array.isArray(levels) || levels.length === 0) {
+    throw new Error("Match requires at least one level.");
+  }
+  if (!ALLOWED_LEVEL_COUNTS.has(levels.length)) {
+    throw new Error(`Match level count must be one of: ${[...ALLOWED_LEVEL_COUNTS].join(", ")}.`);
   }
 
   const now = new Date();
@@ -57,7 +60,7 @@ export function createMatch(options = {}) {
     expiresAt: expiresAt.toISOString(),
     windowHours,
     status: "open",
-    levelCount: LEVELS_PER_MATCH,
+    levelCount: levels.length,
     levels: levelManifest,
     players: {},
   };
@@ -252,6 +255,123 @@ export function getLevelComparison(match, levelIndex) {
   return results;
 }
 
+// ── Compact match code ──────────────────────────────────────
+// Encodes a match into a short, clipboard-friendly string.
+// Format: "OS1:<base64>" where the payload is JSON with only
+// the fields needed to recreate the match on the other side.
+
+export function encodeMatchCode(match) {
+  const payload = {
+    v: MATCH_SCHEMA_VERSION,
+    id: match.matchId,
+    s: match.seed,
+    w: match.windowHours,
+    ca: match.createdAt,
+    ex: match.expiresAt,
+    lc: match.levelCount,
+    ls: match.levels.map((l) => l.levelId),
+    ps: {},
+  };
+
+  for (const [pid, player] of Object.entries(match.players)) {
+    payload.ps[pid] = {
+      st: player.status,
+      sc: player.totalScore,
+      t: player.totalTimeMs,
+      cc: player.completedCount,
+      u: player.totalUndoCount,
+      r: player.totalResetCount,
+      h: player.totalHintCount,
+      ev: player.events
+        .filter((e) => e.type === "level-finish")
+        .map((e) => ({
+          li: e.levelId,
+          d: e.durationMs,
+          s: e.score,
+          u: e.undoCount,
+          r: e.resetCount,
+          h: e.hintCount,
+          ix: e.levelIndex,
+        })),
+    };
+  }
+
+  const json = JSON.stringify(payload);
+  return `OS1:${btoa(unescape(encodeURIComponent(json)))}`;
+}
+
+export function decodeMatchCode(code) {
+  const trimmed = (code || "").trim();
+
+  // Support both compact codes and raw JSON (backwards compat)
+  if (trimmed.startsWith("{")) {
+    return { ok: true, format: "json", data: JSON.parse(trimmed) };
+  }
+
+  if (!trimmed.startsWith("OS1:")) {
+    return { ok: false, reason: "Ogiltig matchkod. Koden ska börja med OS1: eller vara JSON." };
+  }
+
+  try {
+    const b64 = trimmed.slice(4);
+    const json = decodeURIComponent(escape(atob(b64)));
+    const p = JSON.parse(json);
+
+    if (p.v !== MATCH_SCHEMA_VERSION) {
+      return { ok: false, reason: `Fel version: ${p.v}` };
+    }
+
+    // Rebuild full match structure
+    const match = {
+      schemaVersion: p.v,
+      kind: MATCH_KIND,
+      matchId: p.id,
+      seed: p.s,
+      createdAt: p.ca,
+      createdBy: null,
+      expiresAt: p.ex,
+      windowHours: p.w,
+      status: "open",
+      levelCount: p.lc,
+      levels: p.ls.map((levelId, i) => ({ index: i + 1, levelId })),
+      players: {},
+    };
+
+    for (const [pid, pd] of Object.entries(p.ps || {})) {
+      match.players[pid] = {
+        playerId: pid,
+        joinedAt: p.ca,
+        status: pd.st,
+        completedCount: pd.cc,
+        totalScore: pd.sc,
+        totalTimeMs: pd.t,
+        totalUndoCount: pd.u,
+        totalResetCount: pd.r,
+        totalHintCount: pd.h,
+        finishedAt: pd.st === "finished" ? p.ca : null,
+        events: (pd.ev || []).map((e) => ({
+          type: "level-finish",
+          timestamp: p.ca,
+          levelIndex: e.ix,
+          levelId: e.li,
+          durationMs: e.d,
+          score: e.s,
+          undoCount: e.u,
+          resetCount: e.r,
+          hintCount: e.h,
+          moveCount: 0,
+          firstAttempt: false,
+        })),
+      };
+    }
+
+    updateMatchStatus(match);
+    return { ok: true, format: "compact", data: match };
+  } catch {
+    return { ok: false, reason: "Kunde inte avkoda matchkoden. Kontrollera att du kopierade hela koden." };
+  }
+}
+
 // ── Serialization ───────────────────────────────────────────
 
 export function serializeMatch(match) {
@@ -274,8 +394,11 @@ export function validateMatchStructure(data) {
   if (!data.seed || typeof data.seed !== "string") {
     return { ok: false, reason: "Missing or invalid seed." };
   }
-  if (!Array.isArray(data.levels) || data.levels.length !== LEVELS_PER_MATCH) {
-    return { ok: false, reason: `Match must have exactly ${LEVELS_PER_MATCH} levels.` };
+  if (!Array.isArray(data.levels) || data.levels.length === 0) {
+    return { ok: false, reason: "Match must have at least one level." };
+  }
+  if (!ALLOWED_LEVEL_COUNTS.has(data.levels.length)) {
+    return { ok: false, reason: `Match level count must be one of: ${[...ALLOWED_LEVEL_COUNTS].join(", ")}.` };
   }
   return { ok: true };
 }

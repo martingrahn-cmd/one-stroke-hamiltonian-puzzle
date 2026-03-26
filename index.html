@@ -17,7 +17,8 @@
     <div class="ambient-blur blur-b"></div>
 
     <main class="app-shell">
-      <aside class="panel sidebar">
+      <aside class="panel sidebar" id="sidebar">
+        <div class="mobile-panel-handle" aria-hidden="true"><span></span></div>
         <header class="headline">
           <p class="eyebrow">Hamiltonian Path Puzzle</p>
           <h1>One Stroke</h1>
@@ -92,31 +93,57 @@
           </section>
 
           <div id="multiplayerPanels">
-            <section class="panel-inset challenge-panel">
-              <h2>Challenge Mix (10)</h2>
-              <div class="challenge-controls">
-                <input
-                  id="challengeSeedInput"
-                  type="text"
-                  maxlength="64"
-                  placeholder="seed-123"
-                  aria-label="Challenge seed"
-                />
-                <button id="challengeGenerateBtn" type="button">Skapa Mix</button>
+            <!-- ── Fas 1: Skapa match ── -->
+            <section id="matchPhaseSetup" class="panel-inset match-panel match-phase">
+              <h2>Utmana en vän</h2>
+              <p class="match-description">Välj antal banor och starta. Ni spelar samma banor — jämför poäng och tid efteråt.</p>
+
+              <div class="match-setup">
+                <div class="match-setup-row">
+                  <label class="match-label" for="matchLevelCountSelect">Banor</label>
+                  <select id="matchLevelCountSelect" aria-label="Antal banor">
+                    <option value="3">3 snabba</option>
+                    <option value="5">5 medel</option>
+                    <option value="10" selected>10 standard</option>
+                  </select>
+                </div>
+                <div class="match-setup-row">
+                  <label class="match-label" for="challengeSeedInput">Seed</label>
+                  <input
+                    id="challengeSeedInput"
+                    type="text"
+                    maxlength="64"
+                    placeholder="valfritt — lämna tomt för dagens"
+                    aria-label="Challenge seed"
+                  />
+                </div>
               </div>
-              <p id="challengeMeta" class="challenge-meta">Ingen aktiv challenge.</p>
-              <div id="challengeList" class="challenge-list" role="list"></div>
+
+              <div class="match-actions">
+                <button id="challengeGenerateBtn" type="button" class="primary">Skapa ny match</button>
+              </div>
+
+              <div class="match-divider">
+                <span>eller</span>
+              </div>
+
+              <button id="importMatchBtn" type="button" class="match-import-trigger">Har du en matchkod? Klistra in den här</button>
             </section>
 
-            <section class="panel-inset challenge-results-panel">
-              <h2>Challenge Resultat</h2>
+            <!-- ── Fas 2: Spela ── -->
+            <section id="matchPhasePlay" class="panel-inset match-panel match-phase" hidden>
+              <div class="match-phase-header">
+                <h2>Match pågår</h2>
+                <p id="matchProgressLabel" class="match-progress-label">0 / 10 banor klara</p>
+              </div>
+              <div id="challengeList" class="challenge-list" role="list"></div>
               <div class="challenge-totals">
                 <article class="mini-stat">
                   <span class="label">Poäng</span>
                   <strong id="challengeScoreLabel">0</strong>
                 </article>
                 <article class="mini-stat">
-                  <span class="label">Total Tid</span>
+                  <span class="label">Tid</span>
                   <strong id="challengeTimeLabel">0:00</strong>
                 </article>
                 <article class="mini-stat">
@@ -125,26 +152,48 @@
                 </article>
               </div>
               <div id="challengeSplitList" class="challenge-split-list" role="list"></div>
-              <div class="challenge-export-row">
-                <button id="copyChallengeSummaryBtn" type="button">Kopiera Summary</button>
-                <button id="exportChallengeSummaryBtn" type="button">Exportera JSON</button>
-              </div>
+              <button id="matchAbortBtn" type="button" class="match-abort-btn">Avbryt match</button>
             </section>
 
-            <section class="panel-inset match-panel">
-              <h2>Match (1v1)</h2>
-              <p class="match-description">Spela samma 10 banor som en vän och jämför resultat.</p>
-              <div class="match-controls">
-                <button id="exportMatchBtn" type="button">Kopiera matchkod</button>
-                <button id="importMatchBtn" type="button">Importera matchkod</button>
+            <!-- ── Fas 3: Dela ── -->
+            <section id="matchPhaseShare" class="panel-inset match-panel match-phase" hidden>
+              <div class="match-phase-header">
+                <h2>Match klar!</h2>
+                <p class="match-description">Bra jobbat! Dela matchkoden med din vän så spelar hen samma banor.</p>
               </div>
-              <p id="matchStatusLabel" class="match-status-label">Ingen aktiv match.</p>
-              <div id="matchStandingsView" class="match-standings" hidden>
-                <h3>Standings</h3>
+              <div class="challenge-totals">
+                <article class="mini-stat">
+                  <span class="label">Poäng</span>
+                  <strong id="shareTotalScore">0</strong>
+                </article>
+                <article class="mini-stat">
+                  <span class="label">Tid</span>
+                  <strong id="shareTotalTime">0:00</strong>
+                </article>
+                <article class="mini-stat">
+                  <span class="label">Klara</span>
+                  <strong id="shareTotalCompleted">0 / 10</strong>
+                </article>
+              </div>
+              <button id="exportMatchBtn" type="button" class="primary match-share-btn">Kopiera matchkod</button>
+              <p id="matchShareConfirm" class="match-share-confirm" hidden></p>
+              <p class="match-share-hint">Skicka koden till din vän. Hen klistrar in den under "Har du en matchkod?".</p>
+              <button id="matchNewAfterShare" type="button" class="match-secondary-btn">Skapa ny match</button>
+            </section>
+
+            <!-- ── Fas 4: Resultat ── -->
+            <section id="matchPhaseResults" class="panel-inset match-panel match-phase" hidden>
+              <div class="match-phase-header">
+                <h2>Resultatjämförelse</h2>
+                <p id="matchResultStatus" class="match-progress-label"></p>
+              </div>
+              <div id="matchStandingsView" class="match-standings">
+                <h3>Ställning</h3>
                 <div id="matchStandingsList" class="match-standings-list" role="list"></div>
                 <h3>Per bana</h3>
                 <div id="matchLevelComparison" class="match-level-comparison" role="list"></div>
               </div>
+              <button id="matchNewAfterResults" type="button" class="primary">Ny match</button>
             </section>
           </div>
         </div>
@@ -167,6 +216,11 @@
               <span></span><span></span><span></span><span></span>
             </div>
             <div id="board" class="board" aria-label="Spelplan"></div>
+            <div id="countdownOverlay" class="countdown-overlay" hidden>
+              <button id="readyBtn" type="button" class="ready-btn">Redo?</button>
+              <span id="countdownNumber" class="countdown-number" hidden>3</span>
+            </div>
+            <div id="opponentDelta" class="opponent-delta" hidden></div>
           </div>
         </div>
 
@@ -276,6 +330,9 @@
           </section>
         </div>
       </section>
+
+      <!-- Mobile sidebar backdrop (inside app-shell for stacking context) -->
+      <div id="mobilePanelBackdrop" class="mobile-panel-backdrop" hidden></div>
     </main>
 
     <div
@@ -286,30 +343,34 @@
       aria-labelledby="matchImportTitle"
     >
       <div class="modal-card match-import-card">
-        <h2 id="matchImportTitle">Importera matchkod</h2>
-        <p>Klistra in matchkoden du fått från din motståndare.</p>
+        <h2 id="matchImportTitle">Klistra in matchkod</h2>
+        <p>Din vän har skickat en matchkod. Klistra in den nedan.</p>
         <textarea
           id="matchImportTextarea"
           class="match-import-textarea"
-          rows="8"
-          placeholder='Klistra in JSON här...'
-          aria-label="Matchkod JSON"
+          rows="4"
+          placeholder="Klistra in matchkoden här..."
+          aria-label="Matchkod"
         ></textarea>
         <div class="button-row">
           <button id="matchImportCancelBtn" type="button">Avbryt</button>
-          <button id="matchImportConfirmBtn" type="button" class="primary">Importera & Spela</button>
+          <button id="matchImportConfirmBtn" type="button" class="primary">Starta match</button>
         </div>
       </div>
     </div>
 
     <div id="winModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="winTitle">
-      <div class="modal-card">
+      <div class="modal-card win-modal-card">
         <h2 id="winTitle">Bana klar</h2>
         <p id="winText">Snyggt. Du täckte alla noder exakt en gång.</p>
+        <div id="winSplitTable" class="win-split-table" hidden></div>
         <div class="button-row">
           <button id="modalResetBtn" type="button">Spela om</button>
           <button id="modalNextBtn" type="button" class="primary">Nästa nivå</button>
+          <button id="modalCloseBtn" type="button">Stäng</button>
         </div>
+        <button id="modalExportMatchBtn" type="button" class="primary modal-export-btn" hidden>Kopiera matchkod & skicka till vän</button>
+        <p id="modalExportConfirm" class="modal-export-confirm" hidden></p>
       </div>
     </div>
 
@@ -351,6 +412,22 @@
         <div id="levelSelectGrid" class="level-select-grid" role="list"></div>
       </div>
     </div>
+
+    <!-- Mobile bottom tab bar -->
+    <nav id="mobileTabBar" class="mobile-tab-bar" aria-label="Mobilmeny">
+      <button id="mobileTabPlay" type="button" class="mobile-tab active" data-tab="play">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        <span>Spela</span>
+      </button>
+      <button id="mobileTabMenu" type="button" class="mobile-tab" data-tab="menu">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        <span>Meny</span>
+      </button>
+      <button id="mobileTabStats" type="button" class="mobile-tab" data-tab="stats">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"></path></svg>
+        <span>Stats</span>
+      </button>
+    </nav>
 
     <script type="module" src="src/main.js"></script>
   </body>

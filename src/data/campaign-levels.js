@@ -2925,52 +2925,31 @@ export const CAMPAIGN_LEVELS = [
     "width": 5,
     "height": 4,
     "blocked": [
-      [
-        0,
-        0
-      ],
-      [
-        1,
-        0
-      ],
-      [
-        2,
-        0
-      ],
-      [
-        3,
-        0
-      ],
-      [
-        4,
-        0
-      ],
-      [
-        0,
-        3
-      ]
+      [2, 3],
+      [2, 1],
+      [0, 3],
+      [1, 3],
+      [3, 1],
+      [2, 2]
     ],
-    "start": [
-      2,
-      1
-    ],
+    "start": [0, 0],
     "endMode": "free",
     "par": 13,
-    "solution": "DRURDDLLLUULD",
-    "branchNodes": 9,
-    "extraEdges": 7,
+    "solution": "DDRUURRRDDLDR",
+    "branchNodes": 4,
+    "extraEdges": 3,
     "deadEnds": 0,
-    "corridorNodes": 5,
-    "branchingRatio": 0.6429,
-    "corridorRatio": 0.3571,
+    "corridorNodes": 10,
+    "branchingRatio": 0.2857,
+    "corridorRatio": 0.7143,
     "openRatio": 0.7,
-    "pathStyle": "center-weave",
-    "turnRatio": 0.6667,
-    "perimeterRatio": 0.5714,
-    "perimeterStepRatio": 0.4615,
-    "layerSwitchRatio": 0.2308,
+    "pathStyle": "corridor-run",
+    "turnRatio": 0.5833,
+    "perimeterRatio": 0.7857,
+    "perimeterStepRatio": 0.7857,
+    "layerSwitchRatio": 0,
     "maxStraightRunRatio": 0.2308,
-    "maxMonotonicLayerRunRatio": 0.7143
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -5005,40 +4984,28 @@ export const CAMPAIGN_LEVELS = [
     "width": 5,
     "height": 5,
     "blocked": [
-      [
-        0,
-        0
-      ],
-      [
-        0,
-        1
-      ],
-      [
-        4,
-        4
-      ]
+      [1, 4],
+      [2, 2],
+      [3, 1]
     ],
-    "start": [
-      1,
-      3
-    ],
+    "start": [4, 3],
     "endMode": "free",
     "par": 21,
-    "solution": "RURULLURRRDDDLDLLLUUR",
-    "branchNodes": 16,
-    "extraEdges": 13,
-    "deadEnds": 0,
-    "corridorNodes": 6,
-    "branchingRatio": 0.7273,
-    "corridorRatio": 0.2727,
+    "solution": "DLLURURUULLDLULDDRDLD",
+    "branchNodes": 13,
+    "extraEdges": 8,
+    "deadEnds": 1,
+    "corridorNodes": 8,
+    "branchingRatio": 0.5909,
+    "corridorRatio": 0.3636,
     "openRatio": 0.88,
     "pathStyle": "center-weave",
-    "turnRatio": 0.6,
-    "perimeterRatio": 0.5909,
-    "perimeterStepRatio": 0.5238,
-    "layerSwitchRatio": 0.2857,
-    "maxStraightRunRatio": 0.1429,
-    "maxMonotonicLayerRunRatio": 0.5455
+    "turnRatio": 0.8,
+    "perimeterRatio": 0.6818,
+    "perimeterStepRatio": 0.6818,
+    "layerSwitchRatio": 0,
+    "maxStraightRunRatio": 0.0952,
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -5269,44 +5236,29 @@ export const CAMPAIGN_LEVELS = [
     "width": 6,
     "height": 5,
     "blocked": [
-      [
-        4,
-        0
-      ],
-      [
-        5,
-        0
-      ],
-      [
-        5,
-        3
-      ],
-      [
-        3,
-        4
-      ]
+      [2, 0],
+      [3, 0],
+      [4, 2],
+      [1, 0]
     ],
-    "start": [
-      5,
-      4
-    ],
+    "start": [1, 2],
     "endMode": "free",
     "par": 25,
-    "solution": "LULULULDDRDLLUUUURRRDRDRU",
-    "branchNodes": 18,
-    "extraEdges": 14,
+    "solution": "URDRURURDDDDLULDLULDLUUUU",
+    "branchNodes": 20,
+    "extraEdges": 13,
     "deadEnds": 1,
-    "corridorNodes": 7,
-    "branchingRatio": 0.6923,
-    "corridorRatio": 0.2692,
+    "corridorNodes": 5,
+    "branchingRatio": 0.7692,
+    "corridorRatio": 0.1923,
     "openRatio": 0.8667,
-    "pathStyle": "edge-dive",
-    "turnRatio": 0.7083,
-    "perimeterRatio": 0.5385,
-    "perimeterStepRatio": 0.44,
-    "layerSwitchRatio": 0.24,
+    "pathStyle": "center-weave",
+    "turnRatio": 0.75,
+    "perimeterRatio": 0.5769,
+    "perimeterStepRatio": 0.5769,
+    "layerSwitchRatio": 0,
     "maxStraightRunRatio": 0.16,
-    "maxMonotonicLayerRunRatio": 0.6154
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -5705,52 +5657,31 @@ export const CAMPAIGN_LEVELS = [
     "width": 6,
     "height": 5,
     "blocked": [
-      [
-        0,
-        0
-      ],
-      [
-        1,
-        0
-      ],
-      [
-        0,
-        1
-      ],
-      [
-        0,
-        4
-      ],
-      [
-        4,
-        4
-      ],
-      [
-        5,
-        4
-      ]
+      [5, 2],
+      [5, 3],
+      [4, 2],
+      [4, 1],
+      [0, 2],
+      [5, 4]
     ],
-    "start": [
-      2,
-      3
-    ],
+    "start": [1, 0],
     "endMode": "free",
     "par": 23,
-    "solution": "URURDDRUUULLLDLDLDRDRRU",
-    "branchNodes": 16,
-    "extraEdges": 14,
-    "deadEnds": 0,
+    "solution": "LDRDDLDRRRRULLURULURRRD",
+    "branchNodes": 15,
+    "extraEdges": 11,
+    "deadEnds": 1,
     "corridorNodes": 8,
-    "branchingRatio": 0.6667,
+    "branchingRatio": 0.625,
     "corridorRatio": 0.3333,
     "openRatio": 0.8,
     "pathStyle": "center-weave",
-    "turnRatio": 0.7273,
-    "perimeterRatio": 0.5,
-    "perimeterStepRatio": 0.3913,
-    "layerSwitchRatio": 0.3478,
-    "maxStraightRunRatio": 0.1304,
-    "maxMonotonicLayerRunRatio": 0.5
+    "turnRatio": 0.6818,
+    "perimeterRatio": 0.5833,
+    "perimeterStepRatio": 0.5833,
+    "layerSwitchRatio": 0,
+    "maxStraightRunRatio": 0.1739,
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -7758,64 +7689,34 @@ export const CAMPAIGN_LEVELS = [
     "width": 7,
     "height": 7,
     "blocked": [
-      [
-        2,
-        0
-      ],
-      [
-        5,
-        0
-      ],
-      [
-        6,
-        0
-      ],
-      [
-        6,
-        1
-      ],
-      [
-        2,
-        2
-      ],
-      [
-        4,
-        3
-      ],
-      [
-        3,
-        4
-      ],
-      [
-        6,
-        4
-      ],
-      [
-        6,
-        6
-      ]
+      [3, 5],
+      [3, 6],
+      [6, 3],
+      [2, 0],
+      [3, 0],
+      [4, 2],
+      [6, 6],
+      [1, 5],
+      [1, 2]
     ],
-    "start": [
-      4,
-      2
-    ],
+    "start": [0, 5],
     "endMode": "free",
     "par": 39,
-    "solution": "LDLDLDRRRURURULULULDLLULDDRDLDDDRRRRRUR",
-    "branchNodes": 27,
-    "extraEdges": 19,
-    "deadEnds": 1,
-    "corridorNodes": 12,
-    "branchingRatio": 0.675,
-    "corridorRatio": 0.3,
+    "solution": "DRRUURRDDRURULULLULDLDLUUUURDRRRURRDDLU",
+    "branchNodes": 25,
+    "extraEdges": 17,
+    "deadEnds": 0,
+    "corridorNodes": 15,
+    "branchingRatio": 0.625,
+    "corridorRatio": 0.375,
     "openRatio": 0.8163,
     "pathStyle": "center-weave",
-    "turnRatio": 0.7368,
-    "perimeterRatio": 0.45,
-    "perimeterStepRatio": 0.3333,
-    "layerSwitchRatio": 0.359,
-    "maxStraightRunRatio": 0.1282,
-    "maxMonotonicLayerRunRatio": 0.25
+    "turnRatio": 0.6842,
+    "perimeterRatio": 0.475,
+    "perimeterStepRatio": 0.475,
+    "layerSwitchRatio": 0,
+    "maxStraightRunRatio": 0.1026,
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -10108,60 +10009,33 @@ export const CAMPAIGN_LEVELS = [
     "width": 8,
     "height": 7,
     "blocked": [
-      [
-        0,
-        0
-      ],
-      [
-        1,
-        0
-      ],
-      [
-        2,
-        0
-      ],
-      [
-        7,
-        0
-      ],
-      [
-        0,
-        1
-      ],
-      [
-        4,
-        2
-      ],
-      [
-        5,
-        3
-      ],
-      [
-        3,
-        4
-      ]
+      [6, 6],
+      [5, 0],
+      [0, 0],
+      [0, 6],
+      [0, 5],
+      [7, 6],
+      [5, 6],
+      [6, 4]
     ],
-    "start": [
-      2,
-      2
-    ],
+    "start": [4, 3],
     "endMode": "free",
     "par": 47,
-    "solution": "RDRDRDRUUULULULDLLDLDRRDDLULDDRRRURDRRRUUUUULUL",
-    "branchNodes": 39,
-    "extraEdges": 28,
+    "solution": "LLDRRDDLULDLUULURULURURRRDRRURDDLDRDDLLUUULLULD",
+    "branchNodes": 37,
+    "extraEdges": 31,
     "deadEnds": 0,
-    "corridorNodes": 9,
-    "branchingRatio": 0.8125,
-    "corridorRatio": 0.1875,
+    "corridorNodes": 11,
+    "branchingRatio": 0.7708,
+    "corridorRatio": 0.2292,
     "openRatio": 0.8571,
     "pathStyle": "center-weave",
-    "turnRatio": 0.6957,
-    "perimeterRatio": 0.4375,
-    "perimeterStepRatio": 0.3404,
-    "layerSwitchRatio": 0.3404,
-    "maxStraightRunRatio": 0.1064,
-    "maxMonotonicLayerRunRatio": 0.2083
+    "turnRatio": 0.7174,
+    "perimeterRatio": 0.3958,
+    "perimeterStepRatio": 0.3958,
+    "layerSwitchRatio": 0,
+    "maxStraightRunRatio": 0.0638,
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,
@@ -10172,36 +10046,27 @@ export const CAMPAIGN_LEVELS = [
     "width": 7,
     "height": 7,
     "blocked": [
-      [
-        3,
-        0
-      ],
-      [
-        2,
-        4
-      ]
+      [0, 6],
+      [3, 5]
     ],
-    "start": [
-      4,
-      0
-    ],
+    "start": [0, 1],
     "endMode": "free",
     "par": 46,
-    "solution": "DLDLDLUURULLDDDDRDLDRRURDRURDRUULURUUULDDLDLDR",
+    "solution": "URRRDDRUURRDLDRDLLLDRRRDDLULDLLUUUUULDLDRDLDRD",
     "branchNodes": 41,
-    "extraEdges": 31,
+    "extraEdges": 32,
     "deadEnds": 0,
     "corridorNodes": 6,
     "branchingRatio": 0.8723,
     "corridorRatio": 0.1277,
     "openRatio": 0.9592,
-    "pathStyle": "edge-dive",
-    "turnRatio": 0.7778,
+    "pathStyle": "center-weave",
+    "turnRatio": 0.6667,
     "perimeterRatio": 0.4894,
-    "perimeterStepRatio": 0.3696,
-    "layerSwitchRatio": 0.3478,
-    "maxStraightRunRatio": 0.087,
-    "maxMonotonicLayerRunRatio": 0.2553
+    "perimeterStepRatio": 0.4894,
+    "layerSwitchRatio": 0,
+    "maxStraightRunRatio": 0.1087,
+    "maxMonotonicLayerRunRatio": 0
   },
   {
     "formatVersion": 2,

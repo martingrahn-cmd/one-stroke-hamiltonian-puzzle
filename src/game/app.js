@@ -30,6 +30,8 @@ import {
   getLevelComparison,
   serializeMatch,
   validateMatchStructure,
+  encodeMatchCode,
+  decodeMatchCode,
 } from "../core/match.js";
 import { checkRunResult } from "../core/plausibility.js";
 import { createMixedChallenge } from "./challenge-pool.js";
@@ -401,10 +403,15 @@ export class OneStrokeApp {
   constructor() {
     this.validateCampaignData();
 
+    this.appShellEl = document.querySelector(".app-shell");
     this.boardEl = document.getElementById("board");
     this.boardStageEl = this.boardEl?.closest(".board-stage") ?? null;
     this.liveTimerEl = document.getElementById("liveTimer");
     this.liveMovesEl = document.getElementById("liveMoves");
+    this.countdownOverlayEl = document.getElementById("countdownOverlay");
+    this.countdownNumberEl = document.getElementById("countdownNumber");
+    this.readyBtn = document.getElementById("readyBtn");
+    this.opponentDeltaEl = document.getElementById("opponentDelta");
     this.levelNameEl = document.getElementById("levelName");
     this.levelLabelEl = document.getElementById("levelLabel");
     this.difficultyLabelEl = document.getElementById("difficultyLabel");
@@ -423,6 +430,10 @@ export class OneStrokeApp {
     this.winTextEl = document.getElementById("winText");
     this.modalResetBtn = document.getElementById("modalResetBtn");
     this.modalNextBtn = document.getElementById("modalNextBtn");
+    this.modalCloseBtn = document.getElementById("modalCloseBtn");
+    this.modalExportMatchBtn = document.getElementById("modalExportMatchBtn");
+    this.modalExportConfirmEl = document.getElementById("modalExportConfirm");
+    this.winSplitTableEl = document.getElementById("winSplitTable");
     this.campaignModeBtn = document.getElementById("campaignModeBtn");
     this.challengeModeBtn = document.getElementById("challengeModeBtn");
     this.highScoreMenuBtn = document.getElementById("highScoreMenuBtn");
@@ -454,14 +465,11 @@ export class OneStrokeApp {
     this.achievementListEl = document.getElementById("achievementList");
     this.challengeSeedInput = document.getElementById("challengeSeedInput");
     this.challengeGenerateBtn = document.getElementById("challengeGenerateBtn");
-    this.challengeMetaEl = document.getElementById("challengeMeta");
     this.challengeListEl = document.getElementById("challengeList");
     this.challengeScoreLabelEl = document.getElementById("challengeScoreLabel");
     this.challengeTimeLabelEl = document.getElementById("challengeTimeLabel");
     this.challengeCompletedLabelEl = document.getElementById("challengeCompletedLabel");
     this.challengeSplitListEl = document.getElementById("challengeSplitList");
-    this.copyChallengeSummaryBtn = document.getElementById("copyChallengeSummaryBtn");
-    this.exportChallengeSummaryBtn = document.getElementById("exportChallengeSummaryBtn");
     this.levelSelectModalEl = document.getElementById("levelSelectModal");
     this.levelSelectCloseBtn = document.getElementById("levelSelectCloseBtn");
     this.levelSelectSummaryEl = document.getElementById("levelSelectSummary");
@@ -469,9 +477,9 @@ export class OneStrokeApp {
     this.levelSelectDifficultyFilter = document.getElementById("levelSelectDifficultyFilter");
     this.levelSelectStatusFilter = document.getElementById("levelSelectStatusFilter");
     this.levelSelectGridEl = document.getElementById("levelSelectGrid");
+    this.matchLevelCountSelect = document.getElementById("matchLevelCountSelect");
     this.exportMatchBtn = document.getElementById("exportMatchBtn");
     this.importMatchBtn = document.getElementById("importMatchBtn");
-    this.matchStatusLabelEl = document.getElementById("matchStatusLabel");
     this.matchStandingsViewEl = document.getElementById("matchStandingsView");
     this.matchStandingsListEl = document.getElementById("matchStandingsList");
     this.matchLevelComparisonEl = document.getElementById("matchLevelComparison");
@@ -480,10 +488,35 @@ export class OneStrokeApp {
     this.matchImportCancelBtn = document.getElementById("matchImportCancelBtn");
     this.matchImportConfirmBtn = document.getElementById("matchImportConfirmBtn");
 
+    // Mobile UI
+    this.mobileTabBar = document.getElementById("mobileTabBar");
+    this.mobileTabPlay = document.getElementById("mobileTabPlay");
+    this.mobileTabMenu = document.getElementById("mobileTabMenu");
+    this.mobileTabStats = document.getElementById("mobileTabStats");
+    this.mobilePanelBackdrop = document.getElementById("mobilePanelBackdrop");
+    this.sidebarEl = document.getElementById("sidebar");
+    this.mobilePanelOpen = false;
+
+    // Phase-based multiplayer panels
+    this.matchPhaseSetupEl = document.getElementById("matchPhaseSetup");
+    this.matchPhasePlayEl = document.getElementById("matchPhasePlay");
+    this.matchPhaseShareEl = document.getElementById("matchPhaseShare");
+    this.matchPhaseResultsEl = document.getElementById("matchPhaseResults");
+    this.matchProgressLabelEl = document.getElementById("matchProgressLabel");
+    this.matchAbortBtn = document.getElementById("matchAbortBtn");
+    this.matchNewAfterShareBtn = document.getElementById("matchNewAfterShare");
+    this.matchNewAfterResultsBtn = document.getElementById("matchNewAfterResults");
+    this.matchShareConfirmEl = document.getElementById("matchShareConfirm");
+    this.matchResultStatusEl = document.getElementById("matchResultStatus");
+    this.shareTotalScoreEl = document.getElementById("shareTotalScore");
+    this.shareTotalTimeEl = document.getElementById("shareTotalTime");
+    this.shareTotalCompletedEl = document.getElementById("shareTotalCompleted");
+
     this.cells = new Map();
     this.levelButtons = [];
     this.invalidTimer = null;
     this.liveTimerInterval = null;
+    this.countdownTimer = null;
     this.drag = {
       active: false,
       pointerId: null,
@@ -492,6 +525,7 @@ export class OneStrokeApp {
     this.activeHintKey = null;
     this.solutionPathCache = new Map();
     this.hubView = "single-player";
+    this.matchPhase = "setup"; // setup | play | share | results
     this.selectedHighScoreRunId = null;
 
     this.progress = loadCampaignProgress(1);
@@ -540,6 +574,7 @@ export class OneStrokeApp {
     };
 
     this.createChallenge(todaySeed());
+    this.matchPhase = "setup"; // Reset after createChallenge set it to "play"
     this.bindEvents();
     this.loadCampaignLevel(this.campaignCursorIndex, { announce: false, bypassLock: true });
     this.renderChallengePanel();
@@ -570,6 +605,7 @@ export class OneStrokeApp {
   }
 
   bindEvents() {
+    this.readyBtn?.addEventListener("click", () => this.onReadyClick());
     this.undoBtn.addEventListener("click", () => this.undo());
     this.resetBtn.addEventListener("click", () => this.resetLevel());
     this.hintBtn.addEventListener("click", () => this.requestHint());
@@ -582,24 +618,41 @@ export class OneStrokeApp {
       this.hideModal();
       this.goToNextLevel();
     });
+    this.modalCloseBtn?.addEventListener("click", () => this.hideModal());
+    this.modalExportMatchBtn?.addEventListener("click", async () => {
+      await this.exportMatchCode();
+      if (this.modalExportConfirmEl) {
+        this.modalExportConfirmEl.textContent = "Matchkod kopierad! Skicka den till din vän.";
+        this.modalExportConfirmEl.hidden = false;
+      }
+    });
 
-    this.campaignModeBtn.addEventListener("click", () => this.setHubView("single-player"));
-    this.challengeModeBtn.addEventListener("click", () => this.setHubView("multiplayer"));
+    this.campaignModeBtn.addEventListener("click", () => {
+      this.closeMobilePanel();
+      this.setHubView("single-player");
+    });
+    this.challengeModeBtn.addEventListener("click", () => {
+      this.closeMobilePanel();
+      this.setHubView("multiplayer");
+    });
     this.highScoreMenuBtn?.addEventListener("click", () => this.setHubView("high-score"));
     this.achievementMenuBtn?.addEventListener("click", () => this.setHubView("achievement"));
     this.creditsMenuBtn?.addEventListener("click", () => this.setHubView("credit"));
     this.challengeGenerateBtn.addEventListener("click", () => {
-      this.createChallenge(this.challengeSeedInput.value.trim());
+      const levelCount = Number(this.matchLevelCountSelect?.value) || 10;
+      this.createChallenge(this.challengeSeedInput.value.trim(), levelCount);
+      this.closeMobilePanel();
       if (this.state.mode === "challenge") {
         this.loadChallengeLevel(0, { announce: true });
       } else {
         this.renderChallengePanel();
       }
     });
-    this.copyChallengeSummaryBtn?.addEventListener("click", () => this.copyChallengeSummary());
-    this.exportChallengeSummaryBtn?.addEventListener("click", () => this.exportChallengeSummary());
     this.exportMatchBtn?.addEventListener("click", () => this.exportMatchCode());
     this.importMatchBtn?.addEventListener("click", () => this.openMatchImport());
+    this.matchAbortBtn?.addEventListener("click", () => this.abortMatch());
+    this.matchNewAfterShareBtn?.addEventListener("click", () => this.abortMatch());
+    this.matchNewAfterResultsBtn?.addEventListener("click", () => this.abortMatch());
     this.matchImportCancelBtn?.addEventListener("click", () => this.closeMatchImport());
     this.matchImportConfirmBtn?.addEventListener("click", () => this.confirmMatchImport());
     this.matchImportModalEl?.addEventListener("click", (event) => {
@@ -633,6 +686,12 @@ export class OneStrokeApp {
     window.addEventListener("pointercancel", (event) => this.onPointerUp(event));
 
     document.addEventListener("keydown", (event) => this.onKeyDown(event));
+
+    // Mobile tab bar
+    this.mobileTabPlay?.addEventListener("click", () => this.onMobileTab("play"));
+    this.mobileTabMenu?.addEventListener("click", () => this.onMobileTab("menu"));
+    this.mobileTabStats?.addEventListener("click", () => this.onMobileTab("stats"));
+    this.mobilePanelBackdrop?.addEventListener("click", () => this.closeMobilePanel());
   }
 
   setMode(mode) {
@@ -659,8 +718,8 @@ export class OneStrokeApp {
     }
   }
 
-  createChallenge(seedInput) {
-    const challenge = createMixedChallenge(CAMPAIGN_LEVELS, seedInput);
+  createChallenge(seedInput, levelCount = 10) {
+    const challenge = createMixedChallenge(CAMPAIGN_LEVELS, seedInput, levelCount);
     this.challenge = {
       seed: challenge.seed,
       levels: challenge.levels,
@@ -687,18 +746,21 @@ export class OneStrokeApp {
     if (this.challengeSeedInput) {
       this.challengeSeedInput.value = challenge.seed;
     }
+    this.setMatchPhase("play");
     this.renderChallengePanel();
     this.renderHubPanels();
   }
 
   renderChallengePanel() {
-    if (!this.challengeMetaEl || !this.challengeListEl) {
+    if (!this.challengeListEl) {
       return;
     }
 
     const completedCount = Object.keys(this.challenge.resultsByLevelId).length;
-    this.challengeMetaEl.textContent =
-      `Seed: ${this.challenge.seed} · ${completedCount}/${this.challenge.levels.length} klara`;
+    if (this.matchProgressLabelEl) {
+      this.matchProgressLabelEl.textContent =
+        `${completedCount} / ${this.challenge.levels.length} banor klara`;
+    }
 
     this.challengeListEl.innerHTML = "";
     this.challenge.levels.forEach((level, index) => {
@@ -711,7 +773,9 @@ export class OneStrokeApp {
       pill.title = `${level.name} (${diff.label})`;
       pill.classList.toggle("solved", solved);
       pill.classList.toggle("active", this.state.mode === "challenge" && this.challenge.cursor === index);
+      pill.disabled = solved;
       pill.addEventListener("click", () => {
+        if (solved) return;
         this.setMode("challenge");
         this.loadChallengeLevel(index, { announce: true });
       });
@@ -1052,6 +1116,7 @@ export class OneStrokeApp {
       this.renderAchievementView();
     }
     if (this.hubView === "multiplayer") {
+      this.setMatchPhase(this.matchPhase);
       this.renderMatchPanel();
     }
   }
@@ -1060,11 +1125,135 @@ export class OneStrokeApp {
     if (!this.boardModeLabelEl) {
       return;
     }
-    if (this.state.mode === "challenge") {
-      this.boardModeLabelEl.textContent = "Multiplayer · Challenge";
+    const isChallenge = this.state.mode === "challenge";
+    this.boardModeLabelEl.textContent = isChallenge
+      ? "Multiplayer · Challenge"
+      : "Single-player · Kampanj";
+    if (this.appShellEl) {
+      this.appShellEl.dataset.mode = isChallenge ? "challenge" : "campaign";
+    }
+    document.body.classList.toggle("mode-challenge", isChallenge);
+  }
+
+  setMatchPhase(phase) {
+    this.matchPhase = phase;
+    const phases = {
+      setup: this.matchPhaseSetupEl,
+      play: this.matchPhasePlayEl,
+      share: this.matchPhaseShareEl,
+      results: this.matchPhaseResultsEl,
+    };
+    for (const [key, el] of Object.entries(phases)) {
+      if (el) {
+        el.hidden = key !== phase;
+      }
+    }
+
+    if (phase === "share") {
+      this.renderSharePhase();
+    }
+    if (phase === "results") {
+      this.renderMatchStandings();
+      this.renderMatchLevelComparison();
+      this.renderResultsPhaseStatus();
+    }
+  }
+
+  renderSharePhase() {
+    const summary = this.getChallengeSummary();
+    if (this.shareTotalScoreEl) {
+      this.shareTotalScoreEl.textContent = toDisplayScore(summary.totalScore);
+    }
+    if (this.shareTotalTimeEl) {
+      this.shareTotalTimeEl.textContent = toDisplayTime(summary.totalTimeMs);
+    }
+    if (this.shareTotalCompletedEl) {
+      this.shareTotalCompletedEl.textContent = `${summary.completedCount} / ${summary.totalLevels}`;
+    }
+    if (this.matchShareConfirmEl) {
+      this.matchShareConfirmEl.hidden = true;
+    }
+  }
+
+  renderResultsPhaseStatus() {
+    if (!this.matchResultStatusEl || !this.activeMatch) {
       return;
     }
-    this.boardModeLabelEl.textContent = "Single-player · Kampanj";
+    const playerCount = Object.keys(this.activeMatch.players).length;
+    const finishedCount = Object.values(this.activeMatch.players).filter((p) => p.status === "finished").length;
+    this.matchResultStatusEl.textContent = `${finishedCount} av ${playerCount} spelare klara`;
+  }
+
+  abortMatch() {
+    this.activeMatch = null;
+    this.challenge = {
+      seed: todaySeed(),
+      levels: [],
+      cursor: 0,
+      resultsByLevelId: {},
+    };
+    this.setMatchPhase("setup");
+  }
+
+  // ── Mobile panel ──────────────────────────────────────────
+
+  isMobileLayout() {
+    return window.matchMedia("(max-width: 760px)").matches;
+  }
+
+  onMobileTab(tab) {
+    if (!this.isMobileLayout()) return;
+
+    // Update active tab
+    this.mobileTabPlay?.classList.toggle("active", tab === "play");
+    this.mobileTabMenu?.classList.toggle("active", tab === "menu");
+    this.mobileTabStats?.classList.toggle("active", tab === "stats");
+
+    if (tab === "play") {
+      this.closeMobilePanel();
+      // Restore gameplay view
+      const gameView = this.state.mode === "challenge" ? "multiplayer" : "single-player";
+      this.setHubView(gameView, { syncMode: false });
+      return;
+    }
+
+    if (tab === "menu") {
+      // Show sidebar with game mode controls
+      const gameView = this.state.mode === "challenge" ? "multiplayer" : "single-player";
+      this.setHubView(gameView, { syncMode: false });
+      this.openMobilePanel();
+    } else if (tab === "stats") {
+      // Show high-score/achievements in board area
+      this.closeMobilePanel();
+      this.setHubView("high-score", { syncMode: false });
+    }
+  }
+
+  openMobilePanel() {
+    if (!this.sidebarEl) return;
+    this.mobilePanelOpen = true;
+    this.sidebarEl.classList.add("mobile-panel-open");
+    if (this.mobilePanelBackdrop) {
+      this.mobilePanelBackdrop.hidden = false;
+      requestAnimationFrame(() => {
+        this.mobilePanelBackdrop.classList.add("visible");
+      });
+    }
+  }
+
+  closeMobilePanel() {
+    if (!this.sidebarEl) return;
+    this.mobilePanelOpen = false;
+    this.sidebarEl.classList.remove("mobile-panel-open");
+    if (this.mobilePanelBackdrop) {
+      this.mobilePanelBackdrop.classList.remove("visible");
+      // Hide after transition
+      setTimeout(() => {
+        if (!this.mobilePanelOpen) {
+          this.mobilePanelBackdrop.hidden = true;
+        }
+      }, 300);
+    }
   }
 
   isCompletedChallengeRun(run) {
@@ -1881,12 +2070,12 @@ export class OneStrokeApp {
 
     this.buildBoard();
     this.hideModal();
+    this.hideOpponentDelta();
     this.boardEl.classList.remove("board-lost");
     this.renderState();
     this.renderModeButtons();
     this.renderChallengePanel();
     this.renderHubPanels();
-    this.startLiveTimer();
 
     if (announce) {
       const modePrefix =
@@ -1894,6 +2083,12 @@ export class OneStrokeApp {
           ? `Kampanjnivå ${level.campaignIndex}`
           : `Challenge ${this.challenge.cursor + 1}`;
       this.setStatus(`${modePrefix}: ${level.name}`);
+    }
+
+    if (this.state.mode === "challenge") {
+      this.showReadyOverlay();
+    } else {
+      this.startLiveTimer();
     }
   }
 
@@ -2532,15 +2727,51 @@ export class OneStrokeApp {
       );
     } else {
       const solvedCount = Object.keys(this.challenge.resultsByLevelId).length;
+      const totalLevels = this.challenge.levels.length;
       const summary = this.getChallengeSummary();
       const currentSplit = summary.splits.find((split) => split.levelId === this.state.level.id);
       const splitScore = currentSplit?.score ?? 0;
-      this.showModal(
-        hasNext
-          ? `Challenge bana ${this.challenge.cursor + 1}/10 klarad. ${timingText}. Split ${toDisplayScore(splitScore)} p · Totalt ${toDisplayScore(summary.totalScore)} p.`
-          : `Challenge slutförd (${solvedCount}/10). ${timingText}. Totalt ${toDisplayScore(summary.totalScore)} p.`,
-        hasNext,
-      );
+
+      // Show opponent time comparison on the board
+      this.showOpponentDelta(durationMs, this.state.level.id);
+
+      // Build split data for the modal table
+      const modalSplits = this.challenge.levels.map((level, i) => {
+        const res = this.challenge.resultsByLevelId[level.id];
+        const split = summary.splits.find((s) => s.levelId === level.id);
+        const opponent = this.getOpponentResultForLevel(level.id);
+        return {
+          index: i + 1,
+          timeMs: res?.durationMs ?? null,
+          score: split?.score ?? null,
+          opponentTimeMs: opponent?.durationMs ?? null,
+          current: level.id === this.state.level.id,
+        };
+      });
+
+      if (hasNext) {
+        const opponent = this.getOpponentResultForLevel(this.state.level.id);
+        let deltaText = "";
+        if (opponent) {
+          const diffMs = durationMs - opponent.durationMs;
+          const sign = diffMs > 0 ? "+" : "−";
+          const sec = (Math.abs(diffMs) / 1000).toFixed(1);
+          deltaText = Math.abs(diffMs) < 100 ? " · Lika!" : ` · ${sign}${sec}s`;
+        }
+        this.showModal(
+          `Bana ${this.challenge.cursor + 1}/${totalLevels} klarad. ${timingText}. Split ${toDisplayScore(splitScore)} p${deltaText}`,
+          true,
+          { splits: modalSplits },
+        );
+      } else {
+        this.showModal(
+          `Match klar! ${solvedCount}/${totalLevels} banor · ${toDisplayScore(summary.totalScore)} p · ${toDisplayTime(summary.totalTimeMs)}`,
+          false,
+          { title: "Match klar!", splits: modalSplits },
+        );
+        // Transition to share phase
+        this.setMatchPhase("share");
+      }
     }
   }
 
@@ -2858,10 +3089,147 @@ export class OneStrokeApp {
     this.statusBoxEl.append(btnRow);
   }
 
-  showModal(text, showNext) {
+  showModal(text, showNext, options = {}) {
+    const { showMatchExport = false, title = "Bana klar", splits = null } = options;
+    this.winModalEl.querySelector("#winTitle").textContent = title;
     this.winTextEl.textContent = text;
     this.modalNextBtn.hidden = !showNext;
+    // Hide "Spela om" in challenge mode — no replays allowed
+    this.modalResetBtn.hidden = this.state.mode === "challenge";
+    if (this.modalExportMatchBtn) {
+      this.modalExportMatchBtn.hidden = !showMatchExport;
+    }
+    if (this.modalExportConfirmEl) {
+      this.modalExportConfirmEl.hidden = true;
+      this.modalExportConfirmEl.textContent = "";
+    }
+    this.renderWinSplitTable(splits);
     this.winModalEl.classList.remove("hidden");
+  }
+
+  renderWinSplitTable(splits) {
+    if (!this.winSplitTableEl) {
+      return;
+    }
+    if (!splits || splits.length === 0) {
+      this.winSplitTableEl.hidden = true;
+      this.winSplitTableEl.innerHTML = "";
+      return;
+    }
+
+    const hasOpponent = splits.some((s) => s.opponentTimeMs != null);
+
+    this.winSplitTableEl.innerHTML = "";
+    const table = document.createElement("table");
+    table.className = "win-splits";
+
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    const headers = hasOpponent
+      ? ["#", "Du", "Poäng", "Motst.", "Diff"]
+      : ["#", "Tid", "Poäng"];
+    for (const label of headers) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      headRow.append(th);
+    }
+    thead.append(headRow);
+    table.append(thead);
+
+    const tbody = document.createElement("tbody");
+    let runningScore = 0;
+    let runningOpponentTime = 0;
+    let runningMyTime = 0;
+
+    for (const split of splits) {
+      const tr = document.createElement("tr");
+      if (split.current) {
+        tr.classList.add("win-split-current");
+      }
+
+      const tdIndex = document.createElement("td");
+      tdIndex.textContent = split.index;
+      tdIndex.className = "win-split-index";
+
+      const tdTime = document.createElement("td");
+      tdTime.textContent = split.timeMs != null ? toDisplayTime(split.timeMs) : "—";
+      if (split.timeMs != null) runningMyTime += split.timeMs;
+
+      const tdScore = document.createElement("td");
+      runningScore += split.score || 0;
+      tdScore.textContent = split.score != null ? toDisplayScore(split.score) : "—";
+
+      tr.append(tdIndex, tdTime, tdScore);
+
+      if (hasOpponent) {
+        const tdOpponent = document.createElement("td");
+        tdOpponent.className = "win-split-opponent";
+        tdOpponent.textContent = split.opponentTimeMs != null ? toDisplayTime(split.opponentTimeMs) : "—";
+        if (split.opponentTimeMs != null) runningOpponentTime += split.opponentTimeMs;
+
+        const tdDiff = document.createElement("td");
+        tdDiff.className = "win-split-vs";
+        if (split.opponentTimeMs != null && split.timeMs != null) {
+          const diffMs = split.timeMs - split.opponentTimeMs;
+          if (Math.abs(diffMs) < 100) {
+            tdDiff.textContent = "Lika";
+            tdDiff.classList.add("win-split-tied");
+          } else {
+            const sign = diffMs > 0 ? "+" : "−";
+            const sec = (Math.abs(diffMs) / 1000).toFixed(1);
+            tdDiff.textContent = `${sign}${sec}s`;
+            tdDiff.classList.add(diffMs > 0 ? "win-split-behind" : "win-split-ahead");
+          }
+        } else {
+          tdDiff.textContent = "—";
+        }
+
+        tr.append(tdOpponent, tdDiff);
+      }
+
+      tbody.append(tr);
+    }
+    table.append(tbody);
+
+    // Total row
+    const summary = this.getChallengeSummary();
+    const tfoot = document.createElement("tfoot");
+    const totalRow = document.createElement("tr");
+    totalRow.className = "win-split-total";
+
+    const tdLabel = document.createElement("td");
+    tdLabel.textContent = "Σ";
+    const tdTotalTime = document.createElement("td");
+    tdTotalTime.textContent = toDisplayTime(summary.totalTimeMs);
+    const tdTotalScore = document.createElement("td");
+    tdTotalScore.textContent = toDisplayScore(runningScore);
+    totalRow.append(tdLabel, tdTotalTime, tdTotalScore);
+
+    if (hasOpponent) {
+      const tdOpponentTotal = document.createElement("td");
+      tdOpponentTotal.textContent = runningOpponentTime > 0 ? toDisplayTime(runningOpponentTime) : "—";
+      const tdDiffTotal = document.createElement("td");
+      tdDiffTotal.className = "win-split-vs";
+      if (runningMyTime > 0 && runningOpponentTime > 0) {
+        const totalDiff = runningMyTime - runningOpponentTime;
+        if (Math.abs(totalDiff) < 100) {
+          tdDiffTotal.textContent = "Lika";
+          tdDiffTotal.classList.add("win-split-tied");
+        } else {
+          const sign = totalDiff > 0 ? "+" : "−";
+          const sec = (Math.abs(totalDiff) / 1000).toFixed(1);
+          tdDiffTotal.textContent = `${sign}${sec}s`;
+          tdDiffTotal.classList.add(totalDiff > 0 ? "win-split-behind" : "win-split-ahead");
+        }
+      }
+      totalRow.append(tdOpponentTotal, tdDiffTotal);
+    }
+
+    tfoot.append(totalRow);
+    table.append(tfoot);
+
+    this.winSplitTableEl.append(table);
+    this.winSplitTableEl.hidden = false;
   }
 
   // ── Match (1v1) methods ──────────────────────────────────
@@ -2872,15 +3240,14 @@ export class OneStrokeApp {
       return;
     }
 
-    const matchData = serializeMatch(this.activeMatch);
-    const json = JSON.stringify(matchData);
+    const code = encodeMatchCode(this.activeMatch);
 
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(json);
+        await navigator.clipboard.writeText(code);
       } else {
         const textarea = document.createElement("textarea");
-        textarea.value = json;
+        textarea.value = code;
         textarea.setAttribute("readonly", "");
         textarea.style.position = "fixed";
         textarea.style.top = "-9999px";
@@ -2889,7 +3256,11 @@ export class OneStrokeApp {
         document.execCommand("copy");
         textarea.remove();
       }
-      this.setStatus("Matchkod kopierad! Skicka den till din motståndare.");
+      if (this.matchShareConfirmEl) {
+        this.matchShareConfirmEl.textContent = "Kopierad! Skicka koden till din vän.";
+        this.matchShareConfirmEl.hidden = false;
+      }
+      this.setStatus("Matchkod kopierad!");
     } catch {
       this.setStatus("Kunde inte kopiera matchkoden.", "loss");
     }
@@ -2902,6 +3273,7 @@ export class OneStrokeApp {
     if (this.matchImportTextarea) {
       this.matchImportTextarea.value = "";
     }
+    this.clearMatchImportError();
     this.matchImportModalEl.classList.remove("hidden");
     window.requestAnimationFrame(() => {
       this.matchImportTextarea?.focus();
@@ -2912,25 +3284,53 @@ export class OneStrokeApp {
     this.matchImportModalEl?.classList.add("hidden");
   }
 
+  setMatchImportError(message) {
+    if (!this.matchImportTextarea) {
+      return;
+    }
+    // Show error visually near the textarea
+    let errorEl = this.matchImportModalEl?.querySelector(".match-import-error");
+    if (!errorEl) {
+      errorEl = document.createElement("p");
+      errorEl.className = "match-import-error";
+      this.matchImportTextarea.parentNode.insertBefore(errorEl, this.matchImportTextarea.nextSibling);
+    }
+    errorEl.textContent = message;
+    errorEl.hidden = false;
+  }
+
+  clearMatchImportError() {
+    const errorEl = this.matchImportModalEl?.querySelector(".match-import-error");
+    if (errorEl) {
+      errorEl.hidden = true;
+    }
+  }
+
   confirmMatchImport() {
+    this.clearMatchImportError();
+
     const raw = this.matchImportTextarea?.value?.trim();
     if (!raw) {
-      this.setStatus("Klistra in en matchkod först.", "loss");
+      this.setMatchImportError("Klistra in en matchkod först.");
       return;
     }
 
+    // Decode both compact (OS1:...) and legacy JSON formats
     let matchData;
-    try {
-      matchData = JSON.parse(raw);
-    } catch {
-      this.setStatus("Ogiltig JSON. Kontrollera matchkoden.", "loss");
+    const decoded = decodeMatchCode(raw);
+    if (!decoded.ok) {
+      this.setMatchImportError(decoded.reason);
       return;
     }
+    matchData = decoded.data;
 
-    const validation = validateMatchStructure(matchData);
-    if (!validation.ok) {
-      this.setStatus(`Ogiltig matchkod: ${validation.reason}`, "loss");
-      return;
+    // Validate if it was raw JSON
+    if (decoded.format === "json") {
+      const validation = validateMatchStructure(matchData);
+      if (!validation.ok) {
+        this.setMatchImportError(`Ogiltig matchkod: ${validation.reason}`);
+        return;
+      }
     }
 
     // Recreate the challenge from the match's seed and level list
@@ -2940,7 +3340,43 @@ export class OneStrokeApp {
       .filter(Boolean);
 
     if (matchLevels.length !== matchData.levels.length) {
-      this.setStatus("Matchkoden innehåller nivåer som saknas i din kampanjdata.", "loss");
+      this.setMatchImportError(
+        `Matchkoden innehåller ${matchData.levels.length} nivåer men ${matchData.levels.length - matchLevels.length} saknas i din kampanjdata.`,
+      );
+      return;
+    }
+
+    // Rename the opponent's "local-player" so we can join as ourselves
+    if (matchData.players[LOCAL_PLAYER_ID]) {
+      const opponentData = matchData.players[LOCAL_PLAYER_ID];
+      const opponentName = `spelare-${matchData.matchId.slice(-6)}`;
+      opponentData.playerId = opponentName;
+      delete matchData.players[LOCAL_PLAYER_ID];
+      matchData.players[opponentName] = opponentData;
+    }
+
+    // Use the imported match object and add ourselves as a player
+    this.activeMatch = matchData;
+    try {
+      addPlayerToMatch(this.activeMatch, LOCAL_PLAYER_ID);
+    } catch {
+      // Already in match or expired — continue anyway for local play.
+    }
+
+    if (this.challengeSeedInput) {
+      this.challengeSeedInput.value = matchData.seed;
+    }
+
+    // Check if this is a completed match (view-only) or one to play
+    const localPlayer = this.activeMatch.players[LOCAL_PLAYER_ID];
+    const isViewOnly = localPlayer?.status === "finished";
+
+    if (isViewOnly) {
+      this.closeMatchImport();
+      this.setHubView("multiplayer");
+      this.setMatchPhase("results");
+      this.renderMatchPanel();
+      this.setStatus("Match importerad — resultatjämförelse visas.");
       return;
     }
 
@@ -2957,52 +3393,35 @@ export class OneStrokeApp {
       saved: false,
     };
 
-    // Use the imported match object and add ourselves as a player
-    this.activeMatch = matchData;
-    try {
-      addPlayerToMatch(this.activeMatch, LOCAL_PLAYER_ID);
-    } catch {
-      // Already in match or expired — continue anyway for local play.
-    }
-
-    if (this.challengeSeedInput) {
-      this.challengeSeedInput.value = matchData.seed;
-    }
-
     this.closeMatchImport();
     this.setHubView("multiplayer");
+    this.setMatchPhase("play");
     this.loadChallengeLevel(0, { announce: true });
     this.renderMatchPanel();
-    this.setStatus(`Match importerad! Seed: ${matchData.seed}. Spela alla 10 banor.`);
+
+    const opponentNames = Object.keys(this.activeMatch.players)
+      .filter((id) => id !== LOCAL_PLAYER_ID)
+      .map((id) => id)
+      .join(", ");
+    const opponentInfo = opponentNames ? ` mot ${opponentNames}` : "";
+    this.setStatus(`Match startad${opponentInfo}! Spela alla ${matchData.levelCount} banor.`);
   }
 
   renderMatchPanel() {
-    if (!this.matchStatusLabelEl) {
-      return;
-    }
-
     if (!this.activeMatch) {
-      this.matchStatusLabelEl.textContent = "Ingen aktiv match.";
-      if (this.matchStandingsViewEl) {
-        this.matchStandingsViewEl.hidden = true;
-      }
       return;
     }
 
-    const playerCount = Object.keys(this.activeMatch.players).length;
-    const localPlayer = this.activeMatch.players[LOCAL_PLAYER_ID];
-    const localStatus = localPlayer?.status === "finished" ? "klar" : "spelar";
-
-    this.matchStatusLabelEl.textContent =
-      `Match: ${this.activeMatch.matchId} · ${playerCount} spelare · Du: ${localStatus}`;
-
-    // Show standings if there are opponents with results
-    const hasOpponentData = playerCount > 1;
-    if (this.matchStandingsViewEl) {
-      this.matchStandingsViewEl.hidden = !hasOpponentData;
+    // Update progress label in play phase
+    if (this.matchProgressLabelEl) {
+      const completedCount = Object.keys(this.challenge.resultsByLevelId).length;
+      const totalLevels = this.challenge.levels.length;
+      this.matchProgressLabelEl.textContent = `${completedCount} / ${totalLevels} banor klara`;
     }
 
-    if (hasOpponentData) {
+    // If there are opponents, show results phase standings
+    const playerCount = Object.keys(this.activeMatch.players).length;
+    if (playerCount > 1 && this.matchPhase === "results") {
       this.renderMatchStandings();
       this.renderMatchLevelComparison();
     }
@@ -3019,7 +3438,8 @@ export class OneStrokeApp {
     for (const entry of standings) {
       const row = document.createElement("article");
       row.className = "match-standing-row";
-      if (entry.playerId === LOCAL_PLAYER_ID) {
+      const isYou = entry.playerId === LOCAL_PLAYER_ID;
+      if (isYou) {
         row.classList.add("is-you");
       }
 
@@ -3027,20 +3447,25 @@ export class OneStrokeApp {
       rank.className = "match-standing-rank";
       rank.textContent = `#${entry.rank}`;
 
-      const name = document.createElement("span");
+      const info = document.createElement("div");
+      info.className = "match-standing-info";
+
+      const name = document.createElement("div");
       name.className = "match-standing-name";
-      name.textContent = entry.playerId === LOCAL_PLAYER_ID ? "Du" : entry.playerId;
+      name.textContent = isYou ? "Du" : entry.playerId;
+
+      const details = document.createElement("div");
+      details.className = "match-standing-details";
+      details.textContent =
+        `${toDisplayTime(entry.totalTimeMs)} · ${entry.completedCount}/${this.activeMatch.levelCount} klara · U:${entry.totalUndoCount} R:${entry.totalResetCount} H:${entry.totalHintCount}`;
+
+      info.append(name, details);
 
       const score = document.createElement("span");
       score.className = "match-standing-score";
       score.textContent = `${toDisplayScore(entry.totalScore)} p`;
 
-      const meta = document.createElement("span");
-      meta.className = "match-standing-meta";
-      meta.textContent =
-        `${toDisplayTime(entry.totalTimeMs)} · ${entry.completedCount}/${this.activeMatch.levelCount} klara`;
-
-      row.append(rank, name, score, meta);
+      row.append(rank, info, score);
       this.matchStandingsListEl.append(row);
     }
   }
@@ -3072,22 +3497,166 @@ export class OneStrokeApp {
       const bestScore = Math.max(...comparison.map((c) => c.score || 0));
 
       for (const result of comparison) {
-        const playerSpan = document.createElement("span");
-        const displayName = result.playerId === LOCAL_PLAYER_ID ? "Du" : result.playerId;
+        const entry = document.createElement("div");
+        entry.className = "match-level-entry";
+        const isYou = result.playerId === LOCAL_PLAYER_ID;
+        const displayName = isYou ? "Du" : result.playerId;
+
         if (result.durationMs !== null) {
-          playerSpan.textContent =
-            `${displayName}: ${toDisplayTime(result.durationMs)} · ${toDisplayScore(result.score)} p`;
-          if (result.score === bestScore && bestScore > 0) {
-            playerSpan.className = "match-level-winner";
+          const isWinner = result.score === bestScore && bestScore > 0;
+          if (isWinner) {
+            entry.classList.add("match-level-winner");
           }
+
+          const nameSpan = document.createElement("span");
+          nameSpan.className = "match-entry-name";
+          nameSpan.textContent = displayName;
+
+          const statsSpan = document.createElement("span");
+          statsSpan.className = "match-entry-stats";
+          statsSpan.textContent =
+            `${toDisplayTime(result.durationMs)} · ${toDisplayScore(result.score)} p · U:${result.undoCount} H:${result.hintCount}`;
+
+          entry.append(nameSpan, statsSpan);
         } else {
-          playerSpan.textContent = `${displayName}: --`;
+          entry.textContent = `${displayName}: Inte spelat ännu`;
+          entry.classList.add("match-level-pending");
         }
-        playersDiv.append(playerSpan);
+        playersDiv.append(entry);
       }
 
       row.append(header, playersDiv);
       this.matchLevelComparisonEl.append(row);
+    }
+  }
+
+  showReadyOverlay() {
+    this.state.status = "waiting";
+    if (!this.countdownOverlayEl) {
+      // No overlay — start immediately
+      this.startLiveTimer();
+      return;
+    }
+    if (this.readyBtn) {
+      this.readyBtn.hidden = false;
+    }
+    if (this.countdownNumberEl) {
+      this.countdownNumberEl.hidden = true;
+    }
+    this.countdownOverlayEl.hidden = false;
+  }
+
+  onReadyClick() {
+    if (this.readyBtn) {
+      this.readyBtn.hidden = true;
+    }
+    if (this.countdownNumberEl) {
+      this.countdownNumberEl.hidden = false;
+    }
+    this.state.status = "countdown";
+    this.runCountdown(() => {
+      this.state.status = "playing";
+      this.levelAttempt.startedAtMs = Date.now();
+      this.startLiveTimer();
+      this.setStatus(`Kör! ${this.state.playableCount - 1} noder kvar.`);
+    });
+  }
+
+  runCountdown(onComplete) {
+    this.cancelCountdown();
+    if (!this.countdownOverlayEl || !this.countdownNumberEl) {
+      onComplete();
+      return;
+    }
+
+    const steps = ["3", "2", "1", "GO!"];
+    let index = 0;
+
+    const showStep = () => {
+      if (index >= steps.length) {
+        this.countdownOverlayEl.hidden = true;
+        onComplete();
+        return;
+      }
+
+      const text = steps[index];
+      this.countdownNumberEl.textContent = text;
+      this.countdownNumberEl.classList.toggle("go", text === "GO!");
+      this.countdownNumberEl.style.animation = "none";
+      void this.countdownNumberEl.offsetWidth;
+      this.countdownNumberEl.style.animation = "";
+
+      index += 1;
+      const delay = text === "GO!" ? 400 : 700;
+      this.countdownTimer = window.setTimeout(showStep, delay);
+    };
+
+    showStep();
+  }
+
+  cancelCountdown() {
+    if (this.countdownTimer) {
+      window.clearTimeout(this.countdownTimer);
+      this.countdownTimer = null;
+    }
+    if (this.countdownOverlayEl) {
+      this.countdownOverlayEl.hidden = true;
+    }
+  }
+
+  getOpponentResultForLevel(levelId) {
+    if (!this.activeMatch) {
+      return null;
+    }
+    for (const player of Object.values(this.activeMatch.players)) {
+      if (player.playerId === LOCAL_PLAYER_ID) {
+        continue;
+      }
+      const finish = player.events.find(
+        (e) => e.type === "level-finish" && e.levelId === levelId,
+      );
+      if (finish) {
+        return { playerId: player.playerId, durationMs: finish.durationMs, score: finish.score };
+      }
+    }
+    return null;
+  }
+
+  showOpponentDelta(myDurationMs, levelId) {
+    const opponent = this.getOpponentResultForLevel(levelId);
+    if (!opponent || !this.opponentDeltaEl) {
+      return;
+    }
+
+    const diffMs = myDurationMs - opponent.durationMs;
+    const absDiff = Math.abs(diffMs);
+    const sign = diffMs > 0 ? "+" : "-";
+    const seconds = (absDiff / 1000).toFixed(1);
+    const displayName = opponent.playerId === LOCAL_PLAYER_ID ? "motståndare" : opponent.playerId;
+
+    this.opponentDeltaEl.classList.remove("ahead", "behind", "tied");
+
+    if (Math.abs(diffMs) < 100) {
+      this.opponentDeltaEl.textContent = `Lika mot ${displayName}!`;
+      this.opponentDeltaEl.classList.add("tied");
+    } else if (diffMs < 0) {
+      this.opponentDeltaEl.textContent = `${sign}${seconds}s mot ${displayName}`;
+      this.opponentDeltaEl.classList.add("ahead");
+    } else {
+      this.opponentDeltaEl.textContent = `${sign}${seconds}s mot ${displayName}`;
+      this.opponentDeltaEl.classList.add("behind");
+    }
+
+    // Re-trigger animation
+    this.opponentDeltaEl.style.animation = "none";
+    void this.opponentDeltaEl.offsetWidth;
+    this.opponentDeltaEl.style.animation = "";
+    this.opponentDeltaEl.hidden = false;
+  }
+
+  hideOpponentDelta() {
+    if (this.opponentDeltaEl) {
+      this.opponentDeltaEl.hidden = true;
     }
   }
 
@@ -3117,6 +3686,7 @@ export class OneStrokeApp {
 
   hideModal() {
     this.winModalEl.classList.add("hidden");
+    this.cancelCountdown();
   }
 
   goToNextLevel() {
@@ -3142,7 +3712,8 @@ export class OneStrokeApp {
 
     const nextChallengeIndex = this.challenge.cursor + 1;
     if (nextChallengeIndex >= this.challenge.levels.length) {
-      this.setStatus("Challenge slutförd. Generera en ny seed för nästa omgång.", "win");
+      this.setMatchPhase("share");
+      this.setStatus("Match klar! Dela matchkoden med din vän.", "win");
       return;
     }
     this.loadChallengeLevel(nextChallengeIndex, { announce: true });
