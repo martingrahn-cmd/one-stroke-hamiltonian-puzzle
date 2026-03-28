@@ -27,13 +27,15 @@
 - [ ] Definiera backend-kontrakt för challenge run events.
 - [ ] Skissa anti-fusk plausibility checks.
 - [ ] Förbered matchobjekt med seed, tidsfönster och bana-lista.
+- [ ] Designprincip: hjärna > hastighet — scoring ska belöna effektivitet (färre undo/reset/hint) mer än ren tid.
 
-## P3 - Gameplay-variation
+## P3 - Gameplay-variation (pågående)
 
-- [ ] Minska "yttervarv-in"-monotoni: banor där perimeter-first-strategi inte fungerar.
-- [ ] Fler blockerade noder på kanterna, interna korridorer, noder som tvingar centrum-first.
-- [ ] Ny path-profil "inside-out" med hög centerAffinity och låg borderRatioTarget.
+- [x] Ny path-profil "inside-out" med hög centerAffinity och låg borderRatioTarget.
+- [x] Fixed endpoint mode för medium+ (105/200 banor).
+- [ ] Minska "yttervarv-in"-monotoni ytterligare med kantblockeringar.
 - [ ] Överväg icke-rektangulära spelplaner (T-form, L-form) för mer variation.
+- [ ] Obligatoriska waypoints eller envägspilar.
 
 ## Drift och process
 

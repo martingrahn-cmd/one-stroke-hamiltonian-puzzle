@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CAMPAIGN_SEED = "one-stroke-campaign-v1";
+const CAMPAIGN_SEED = "one-stroke-campaign-v2";
 const OUTPUT_FILE = path.resolve(__dirname, "../src/data/campaign-levels.js");
 
 const DIFFICULTY_SPECS = [
@@ -50,7 +50,8 @@ const DIFFICULTY_SPECS = [
     maxPerimeterRatio: 0.62,
     maxMonotonicLayerRunRatio: 0.69,
     maxStraightRunRatio: 0.47,
-    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag"],
+    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "inside-out"],
+    fixedEndRatio: 0.5,
   },
   {
     id: "hard",
@@ -72,7 +73,8 @@ const DIFFICULTY_SPECS = [
     maxPerimeterRatio: 0.57,
     maxMonotonicLayerRunRatio: 0.62,
     maxStraightRunRatio: 0.4,
-    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "branch-hunter"],
+    pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "branch-hunter", "inside-out"],
+    fixedEndRatio: 0.7,
   },
   {
     id: "very-hard",
@@ -94,7 +96,8 @@ const DIFFICULTY_SPECS = [
     maxPerimeterRatio: 0.52,
     maxMonotonicLayerRunRatio: 0.56,
     maxStraightRunRatio: 0.34,
-    pathProfiles: ["center-weave", "edge-dive", "zigzag", "branch-hunter"],
+    pathProfiles: ["center-weave", "edge-dive", "zigzag", "branch-hunter", "inside-out"],
+    fixedEndRatio: 1.0,
   },
 ];
 
@@ -173,6 +176,21 @@ const PATH_STYLE_PROFILES = [
       jitter: 0.17,
     },
     borderRatioTarget: 0.6,
+  },
+  {
+    id: "inside-out",
+    startZone: "center",
+    weights: {
+      onward: 1.0,
+      centerAffinity: 1.4,
+      borderDistance: 0.9,
+      turn: 0.95,
+      escapeBorder: 0.3,
+      borderStick: 0.3,
+      borderPenalty: 2.8,
+      jitter: 0.18,
+    },
+    borderRatioTarget: 0.35,
   },
 ];
 
@@ -631,6 +649,15 @@ function assertSolutionMatchesLevel(level) {
   if (level.par !== playableCount - 1) {
     throw new Error(`Par mismatch in ${level.id}`);
   }
+
+  if (level.endMode === "fixed") {
+    if (!Array.isArray(level.end) || level.end.length !== 2) {
+      throw new Error(`Fixed-end level missing valid end coordinate in ${level.id}`);
+    }
+    if (x !== level.end[0] || y !== level.end[1]) {
+      throw new Error(`Solution does not end at fixed endpoint in ${level.id}`);
+    }
+  }
 }
 
 function makeLevelName(difficulty, indexInDifficulty) {
@@ -744,8 +771,20 @@ function generateCampaignLevels(seed) {
           }
         }
 
+        const useFixedEnd = spec.fixedEndRatio != null && random() < spec.fixedEndRatio;
+        const endCoord = parse(path[path.length - 1]);
+        const startCoord = parse(path[0]);
+
+        // For fixed-end, ensure endpoint is not adjacent to start (too trivial)
+        if (useFixedEnd) {
+          const dist = Math.abs(endCoord[0] - startCoord[0]) + Math.abs(endCoord[1] - startCoord[1]);
+          if (dist <= 1) {
+            continue;
+          }
+        }
+
         level = {
-          formatVersion: 2,
+          formatVersion: 3,
           id: `level_${String(globalIndex).padStart(3, "0")}`,
           name: makeLevelName(spec.id, difficultyIndex),
           campaignIndex: globalIndex,
@@ -753,8 +792,9 @@ function generateCampaignLevels(seed) {
           width,
           height,
           blocked,
-          start: parse(path[0]),
-          endMode: "free",
+          start: startCoord,
+          endMode: useFixedEnd ? "fixed" : "free",
+          ...(useFixedEnd ? { end: endCoord } : {}),
           par: openCount - 1,
           solution: toDirections(path),
           branchNodes: stats.branchNodes,

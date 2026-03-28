@@ -5,6 +5,9 @@ Alla noterbara ändringar i projektet.
 ## [Unreleased]
 
 ### Added
+- **Fixed endpoint mode**: medium/hard/very-hard banor kräver att vägen slutar på en specifik målnod markerad med "E". 105 av 200 banor har fast slutpunkt (alla very-hard).
+- **Inside-out path-profil**: ny genereringsprofil som tvingar centrumstart och straffar perimeter-hogging, för mer variation i lösningsstrategier.
+- Visuell markör för målnod (guld "E" med warm glow) distinkt från startnod (blå "S").
 - Hint-system v1 med hint-knapp och tangentbordsstöd (`H`).
 - Visuell hint-markering av rekommenderad nästa nod på spelplanen.
 - Komplett level select modal med sök, svårighetsfilter och statusfilter.
@@ -30,6 +33,8 @@ Alla noterbara ändringar i projektet.
 - Reset-feedback visar nu antal noder kvar.
 
 ### Refactored
+- Level format version bumped 2 → 3 (stöd för `endMode: "fixed"` och `end` coordinate).
+- Kampanjbanor regenererade med seed v2 för att inkludera inside-out och fixed endpoint.
 - Bröt ut `trophies.js` (trophy-katalog och tier-metadata) ur app.js.
 - Bröt ut `formatting.js` (12 visningsfunktioner) ur app.js.
 - Uppdaterad README med fullständig projektstruktur, arkitekturbeskrivning och QA-kommandon.

@@ -26,7 +26,7 @@ export const TUTORIAL_LEVELS = [
   //   X X X X X
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_001",
     name: "Första draget",
     campaignIndex: 1,
@@ -65,7 +65,7 @@ export const TUTORIAL_LEVELS = [
   //   → → →
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_002",
     name: "Svängen",
     campaignIndex: 2,
@@ -105,7 +105,7 @@ export const TUTORIAL_LEVELS = [
   //   . . .
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_003",
     name: "Spiralen",
     campaignIndex: 3,
@@ -141,7 +141,7 @@ export const TUTORIAL_LEVELS = [
   //   → → →
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_004",
     name: "Öppna fältet",
     campaignIndex: 4,
@@ -178,7 +178,7 @@ export const TUTORIAL_LEVELS = [
   //   → → ←
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_005",
     name: "Hindret",
     campaignIndex: 5,
@@ -214,7 +214,7 @@ export const TUTORIAL_LEVELS = [
   //   ← ← ← ↓
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_006",
     name: "Bredare väg",
     campaignIndex: 6,
@@ -251,7 +251,7 @@ export const TUTORIAL_LEVELS = [
   //   ← ← ← X
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_007",
     name: "Utforskaren",
     campaignIndex: 7,
@@ -288,7 +288,7 @@ export const TUTORIAL_LEVELS = [
   //   X  .  ← ← X
   //
   {
-    formatVersion: 2,
+    formatVersion: 3,
     id: "level_008",
     name: "Stigfinnaren",
     campaignIndex: 8,

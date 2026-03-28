@@ -1294,6 +1294,37 @@ div.cell {
   color: #9ac9df;
 }
 
+.cell.end {
+  border-color: #a1824f;
+  box-shadow: 0 0 0 1px #bfa06e75 inset;
+}
+
+.cell.end::before {
+  content: "E";
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  z-index: 3;
+  font-size: 0.61rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #dfb89a;
+}
+
+.cell.end.visited {
+  border-color: #c9a355;
+  box-shadow:
+    0 0 0 1px #e0c07580 inset,
+    0 0 12px #ffd76636;
+}
+
+.cell.end.tail {
+  border-color: #c9a355;
+  box-shadow:
+    0 0 0 1px #e0c07580 inset,
+    0 0 18px #ffd76660;
+}
+
 .cell.tail {
   border-color: #4f88a1;
   box-shadow:
