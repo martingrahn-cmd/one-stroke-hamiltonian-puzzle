@@ -2,7 +2,7 @@ import { createRng, hashStringToSeed, shuffle } from "../core/rng.js";
 
 const MIX_PRESETS = {
   3:  { easy: 1, medium: 1, hard: 1, "very-hard": 0 },
-  5:  { easy: 2, medium: 2, hard: 1, "very-hard": 0 },
+  5:  { easy: 1, medium: 2, hard: 1, "very-hard": 1 },
   10: { easy: 3, medium: 3, hard: 2, "very-hard": 2 },
 };
 

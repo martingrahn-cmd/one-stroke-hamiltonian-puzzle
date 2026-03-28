@@ -33,6 +33,7 @@ python3 -m http.server 5173
 │       ├── app.js          Huvudklass OneStrokeApp (state, rendering, input)
 │       ├── challenge-pool.js   Seed-baserad challenge-mix (3/5/10 banor)
 │       ├── formatting.js   Visningsformatering (tid, poäng, procent, datum)
+│       ├── share-image.js  Canvas-baserad delbar resultatbild (1200x630)
 │       ├── storage.js      LocalStorage-hantering (progress, historik, trophies)
 │       └── trophies.js     31 trophies i 4 tiers (brons/silver/guld/platinum)
 ├── tools/                  Pipeline-skript (körs med Node)
