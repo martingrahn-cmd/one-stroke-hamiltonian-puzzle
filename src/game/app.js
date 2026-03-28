@@ -63,6 +63,7 @@ import {
   TROPHY_TIER_META,
   createTrophyCatalog,
 } from "./trophies.js";
+import { generateShareImage, shareResult } from "./share-image.js";
 
 const LEVEL_FORMAT_VERSION = 3;
 const LOCAL_PLAYER_ID = "local-player";
@@ -170,6 +171,16 @@ export class OneStrokeApp {
     this.matchImportCancelBtn = document.getElementById("matchImportCancelBtn");
     this.matchImportConfirmBtn = document.getElementById("matchImportConfirmBtn");
 
+    // Daily challenge
+    this.dailyChallengeBtn = document.getElementById("dailyChallengeBtn");
+    this.dailyResultCard = document.getElementById("dailyResultCard");
+    this.dailyScoreLabel = document.getElementById("dailyScoreLabel");
+    this.dailyTimeLabel = document.getElementById("dailyTimeLabel");
+    this.dailyCompletedLabel = document.getElementById("dailyCompletedLabel");
+    this.dailyShareBtn = document.getElementById("dailyShareBtn");
+    this.dailyReplayBtn = document.getElementById("dailyReplayBtn");
+    this.dailyDateLabel = document.getElementById("dailyDateLabel");
+
     // Mobile UI
     this.mobileTabBar = document.getElementById("mobileTabBar");
     this.mobileTabPlay = document.getElementById("mobileTabPlay");
@@ -231,6 +242,7 @@ export class OneStrokeApp {
       saved: false,
     };
     this.activeMatch = null;
+    this.dailyMode = false;
 
     this.levelAttempt = {
       startedAtMs: Date.now(),
@@ -262,6 +274,7 @@ export class OneStrokeApp {
     this.renderChallengePanel();
     this.renderModeButtons();
     this.setHubView("single-player", { syncMode: false });
+    this.updateDailyUI();
     this.setStatus("Dra från startnoden till en granne. Dra bakåt för att ångra.");
   }
 
@@ -321,6 +334,7 @@ export class OneStrokeApp {
     this.achievementMenuBtn?.addEventListener("click", () => this.setHubView("achievement"));
     this.creditsMenuBtn?.addEventListener("click", () => this.setHubView("credit"));
     this.challengeGenerateBtn.addEventListener("click", () => {
+      this.dailyMode = false;
       const levelCount = Number(this.matchLevelCountSelect?.value) || 10;
       this.createChallenge(this.challengeSeedInput.value.trim(), levelCount);
       this.closeMobilePanel();
@@ -330,6 +344,9 @@ export class OneStrokeApp {
         this.renderChallengePanel();
       }
     });
+    this.dailyChallengeBtn?.addEventListener("click", () => this.startDailyChallenge());
+    this.dailyShareBtn?.addEventListener("click", () => this.shareDailyResult());
+    this.dailyReplayBtn?.addEventListener("click", () => this.startDailyChallenge());
     this.exportMatchBtn?.addEventListener("click", () => this.exportMatchCode());
     this.importMatchBtn?.addEventListener("click", () => this.openMatchImport());
     this.matchAbortBtn?.addEventListener("click", () => this.abortMatch());
@@ -431,6 +448,90 @@ export class OneStrokeApp {
     this.setMatchPhase("play");
     this.renderChallengePanel();
     this.renderHubPanels();
+  }
+
+  // ── Daily Challenge ──────────────────────────────────────────
+
+  getDailySeed() {
+    return `daily-${todaySeed()}`;
+  }
+
+  startDailyChallenge() {
+    this.dailyMode = true;
+    this.createChallenge(this.getDailySeed(), 5);
+    this.closeMobilePanel();
+    this.setHubView("single-player", { syncMode: false });
+    this.state.mode = "challenge";
+    this.renderModeButtons();
+    this.loadChallengeLevel(0, { announce: true });
+    this.updateDailyUI();
+  }
+
+  updateDailyUI() {
+    if (this.dailyDateLabel) {
+      const today = new Date();
+      this.dailyDateLabel.textContent = new Intl.DateTimeFormat("sv-SE", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      }).format(today);
+    }
+  }
+
+  showDailyResult() {
+    if (!this.dailyResultCard) return;
+
+    const summary = this.getChallengeSummary();
+    if (!summary) return;
+
+    this.dailyResultCard.hidden = false;
+    if (this.dailyScoreLabel) {
+      this.dailyScoreLabel.textContent = toDisplayScore(summary.totalScore);
+    }
+    if (this.dailyTimeLabel) {
+      this.dailyTimeLabel.textContent = toDisplayTime(summary.totalTimeMs);
+    }
+    if (this.dailyCompletedLabel) {
+      this.dailyCompletedLabel.textContent =
+        `${summary.completedCount}/${this.challenge.levels.length}`;
+    }
+  }
+
+  async shareDailyResult() {
+    const summary = this.getChallengeSummary();
+    if (!summary) {
+      this.setStatus("Inget resultat att dela.", "loss");
+      return;
+    }
+
+    const totals = summary.splits.reduce(
+      (acc, s) => {
+        acc.undoCount += Number(s.undoCount) || 0;
+        acc.resetCount += Number(s.resetCount) || 0;
+        acc.hintCount += Number(s.hintCount) || 0;
+        return acc;
+      },
+      { undoCount: 0, resetCount: 0, hintCount: 0 },
+    );
+
+    const canvas = generateShareImage({
+      date: todaySeed(),
+      score: summary.totalScore,
+      timeMs: summary.totalTimeMs,
+      levelCount: this.challenge.levels.length,
+      completedCount: summary.completedCount,
+      undoCount: totals.undoCount,
+      resetCount: totals.resetCount,
+      hintCount: totals.hintCount,
+    });
+
+    const result = await shareResult(canvas, { date: todaySeed() });
+    if (result === "shared") {
+      this.setStatus("Resultat delat!");
+    } else {
+      this.setStatus("Resultatbild nedladdad!");
+    }
   }
 
   renderChallengePanel() {
@@ -2593,6 +2694,9 @@ export class OneStrokeApp {
     this.challengeRunMeta.runId = runId;
     this.challengeRunMeta.saved = true;
     this.renderHubPanels();
+    if (this.dailyMode) {
+      this.showDailyResult();
+    }
   }
 
   handleLoss(reason) {

@@ -93,6 +93,36 @@
           </section>
 
           <div id="multiplayerPanels">
+            <!-- ── Dagens utmaning ── -->
+            <section id="dailyChallengeSection" class="panel-inset daily-challenge-panel">
+              <h2>Dagens utmaning</h2>
+              <p class="match-description">5 banor — samma för alla idag. Spela, jämför och dela ditt resultat!</p>
+              <p id="dailyDateLabel" class="daily-date-label"></p>
+              <button id="dailyChallengeBtn" type="button" class="primary daily-play-btn">Spela dagens utmaning</button>
+              <div id="dailyResultCard" class="daily-result-card" hidden>
+                <div class="daily-result-header">Dagens resultat</div>
+                <div class="daily-result-stats">
+                  <article class="mini-stat">
+                    <span class="label">Poäng</span>
+                    <strong id="dailyScoreLabel">0</strong>
+                  </article>
+                  <article class="mini-stat">
+                    <span class="label">Tid</span>
+                    <strong id="dailyTimeLabel">--</strong>
+                  </article>
+                  <article class="mini-stat">
+                    <span class="label">Klara</span>
+                    <strong id="dailyCompletedLabel">0/5</strong>
+                  </article>
+                </div>
+                <div class="daily-result-actions">
+                  <button id="dailyShareBtn" type="button" class="primary">Dela resultat</button>
+                  <button id="dailyReplayBtn" type="button">Spela igen</button>
+                </div>
+                <canvas id="dailySharePreview" class="daily-share-preview" hidden></canvas>
+              </div>
+            </section>
+
             <!-- ── Fas 1: Skapa match ── -->
             <section id="matchPhaseSetup" class="panel-inset match-panel match-phase">
               <h2>Utmana en vän</h2>

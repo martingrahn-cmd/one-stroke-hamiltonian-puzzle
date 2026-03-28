@@ -1733,6 +1733,66 @@ div.cell {
   gap: 8px;
 }
 
+/* ── Daily Challenge ── */
+
+.daily-challenge-panel {
+  border: 1px solid #1a3040;
+  background: linear-gradient(135deg, #0d1820 0%, #111c26 100%);
+}
+
+.daily-date-label {
+  font-size: 0.82rem;
+  color: var(--text-dim, #5a6a7a);
+  text-transform: capitalize;
+}
+
+.daily-play-btn {
+  margin-top: 4px;
+}
+
+.daily-result-card {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #141c24;
+  border: 1px solid #1e2a35;
+}
+
+.daily-result-header {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #8aafcc;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.daily-result-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.daily-result-stats .mini-stat {
+  flex: 1;
+  text-align: center;
+}
+
+.daily-result-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.daily-result-actions button {
+  flex: 1;
+}
+
+.daily-share-preview {
+  margin-top: 12px;
+  width: 100%;
+  border-radius: 8px;
+}
+
 .match-description {
   margin: 0;
   font-size: 0.82rem;
