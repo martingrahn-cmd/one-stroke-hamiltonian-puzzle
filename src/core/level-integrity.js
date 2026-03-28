@@ -39,6 +39,19 @@ export function validateLevelStructure(level) {
     return { ok: false, reason: "Start node is blocked" };
   }
 
+  if (level.endMode === "fixed") {
+    if (!Array.isArray(level.end) || level.end.length !== 2) {
+      return { ok: false, reason: "Fixed-end level missing valid end coordinate" };
+    }
+    if (!inBounds(level, level.end[0], level.end[1])) {
+      return { ok: false, reason: "End is outside board bounds" };
+    }
+    const endKey = coordKey(level.end[0], level.end[1]);
+    if (blockedSet.has(endKey)) {
+      return { ok: false, reason: "End node is blocked" };
+    }
+  }
+
   const playableCount = getPlayableCount(level);
   if (playableCount <= 1) {
     return { ok: false, reason: "Level has too few playable nodes" };
@@ -94,6 +107,14 @@ export function validateLevelBySolution(level) {
       ok: false,
       reason: `Solution covers ${visited.size} nodes, expected ${playableCount}`,
     };
+  }
+
+  if (level.endMode === "fixed") {
+    const endKey = coordKey(level.end[0], level.end[1]);
+    const finalKey = coordKey(x, y);
+    if (finalKey !== endKey) {
+      return { ok: false, reason: "Solution does not end at the fixed endpoint" };
+    }
   }
 
   return { ok: true };

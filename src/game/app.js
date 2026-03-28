@@ -64,7 +64,7 @@ import {
   createTrophyCatalog,
 } from "./trophies.js";
 
-const LEVEL_FORMAT_VERSION = 2;
+const LEVEL_FORMAT_VERSION = 3;
 const LOCAL_PLAYER_ID = "local-player";
 const CHALLENGE_DIFFICULTY_MULTIPLIER = {
   easy: 1,
@@ -1739,6 +1739,9 @@ export class OneStrokeApp {
     this.state.level = level;
     this.state.blockedSet = getBlockedSet(level);
     this.state.playableCount = getPlayableCount(level);
+    this.state.endKey = level.endMode === "fixed" && Array.isArray(level.end)
+      ? coordKey(level.end[0], level.end[1])
+      : null;
     this.state.path = [startKey];
     this.state.visited = new Set(this.state.path);
     this.state.status = "playing";
@@ -1764,7 +1767,8 @@ export class OneStrokeApp {
         this.state.mode === "campaign"
           ? `Kampanjnivå ${level.campaignIndex}`
           : `Challenge ${this.challenge.cursor + 1}`;
-      this.setStatus(`${modePrefix}: ${level.name}`);
+      const endHint = this.state.endKey ? " (fast slutnod)" : "";
+      this.setStatus(`${modePrefix}: ${level.name}${endHint}`);
     }
 
     if (this.state.mode === "challenge") {
@@ -1823,6 +1827,7 @@ export class OneStrokeApp {
       cell.classList.toggle("visited", isVisited);
       cell.classList.toggle("tail", key === tailKey);
       cell.classList.toggle("start", key === startKey);
+      cell.classList.toggle("end", this.state.endKey != null && key === this.state.endKey);
       cell.classList.toggle("next-option", nextOptions.has(key));
       cell.classList.toggle("hint-target", status === "playing" && key === this.activeHintKey);
       cell.classList.toggle("conn-up", connections?.has("up") === true);
@@ -2241,6 +2246,10 @@ export class OneStrokeApp {
     this.activeHintKey = null;
 
     if (this.state.visited.size === this.state.playableCount) {
+      if (this.state.endKey && this.getTailKey() !== this.state.endKey) {
+        this.handleLoss("alla noder besökta men du slutade inte på målnoden.");
+        return;
+      }
       this.handleWin();
       return;
     }
@@ -2397,7 +2406,10 @@ export class OneStrokeApp {
     this.renderChallengePanel();
 
     const hasNext = this.hasNextLevelInCurrentMode();
-    this.setStatus("Bana klar. Alla noder täckta exakt en gång.", "win");
+    const winMsg = this.state.endKey
+      ? "Bana klar! Alla noder täckta och målet nått."
+      : "Bana klar. Alla noder täckta exakt en gång.";
+    this.setStatus(winMsg, "win");
 
     const timingText = `${toDisplayTime(durationMs)} · ${result.undoCount} undo · ${result.resetCount} reset · ${result.hintCount} hint`;
     if (this.state.mode === "campaign") {
@@ -2639,6 +2651,16 @@ export class OneStrokeApp {
     for (const key of unvisited) {
       if (!seen.has(key)) {
         return "minst en nod blev isolerad.";
+      }
+    }
+
+    // Fixed endpoint: check that the endpoint can still be reached as the LAST node.
+    // If the endpoint has 0 unvisited-or-tail neighbors, it's unreachable.
+    if (this.state.endKey && !visitedSet.has(this.state.endKey)) {
+      const endNeighbors = getNeighborKeys(this.state.level, this.state.blockedSet, this.state.endKey)
+        .filter((k) => !visitedSet.has(k) || k === tailKey);
+      if (endNeighbors.length === 0) {
+        return "målnoden blev oåtkomlig.";
       }
     }
 

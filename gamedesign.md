@@ -22,17 +22,21 @@ Spelplanen är ett grafnät (initialt ett rektangulärt grid med blockerade ruto
 Spelaren vinner när:
 1. Alla spelbara rutor/noder är besökta.
 2. Varje nod är besökt exakt en gång.
-3. Vägen är en sammanhängande kedja från start till valfri slutnod.
+3. Vägen är en sammanhängande kedja från start till slutnod.
+   - **Free mode** (easy): valfri slutnod.
+   - **Fixed mode** (medium+): vägen måste sluta på en specifik markerad målnod ("E").
 
 Begränsningar:
 1. Endast ortogonala steg (upp, ner, vänster, höger).
 2. Inga diagonaler.
 3. En nod får inte beträdas mer än en gång.
 4. Startnod är låst per bana.
+5. I fixed-mode: slutnoden är låst per bana — spelaren vet målet från start.
 
 Förlust/ogiltigt läge:
 - Spelaren fastnar innan alla noder är besökta.
 - En nod blir isolerad så att lösning inte längre är möjlig.
+- I fixed-mode: alla noder besökta men vägen slutar inte på målnoden.
 
 ## 5. Core Loop
 1. Välj bana.
