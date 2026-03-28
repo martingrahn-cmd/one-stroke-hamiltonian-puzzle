@@ -172,6 +172,7 @@ export class OneStrokeApp {
     this.matchImportConfirmBtn = document.getElementById("matchImportConfirmBtn");
 
     // Daily challenge
+    this.dailyChallengeSectionEl = document.getElementById("dailyChallengeSection");
     this.dailyChallengeBtn = document.getElementById("dailyChallengeBtn");
     this.dailyResultCard = document.getElementById("dailyResultCard");
     this.dailyScoreLabel = document.getElementById("dailyScoreLabel");
@@ -458,13 +459,15 @@ export class OneStrokeApp {
 
   startDailyChallenge() {
     this.dailyMode = true;
+    if (this.dailyResultCard) this.dailyResultCard.hidden = true;
     this.createChallenge(this.getDailySeed(), 5);
-    this.closeMobilePanel();
-    this.setHubView("single-player", { syncMode: false });
+    this.setHubView("multiplayer", { syncMode: false });
     this.state.mode = "challenge";
+    this.closeMobilePanel();
+    this.loadChallengeLevel(0, { announce: false });
     this.renderModeButtons();
-    this.loadChallengeLevel(0, { announce: true });
     this.updateDailyUI();
+    this.setStatus("Dagens utmaning! 5 banor — samma för alla idag.");
   }
 
   updateDailyUI() {
@@ -872,6 +875,9 @@ export class OneStrokeApp {
     }
     if (this.singlePlayerLevelSectionEl) {
       this.singlePlayerLevelSectionEl.hidden = this.hubView !== "single-player";
+    }
+    if (this.dailyChallengeSectionEl) {
+      this.dailyChallengeSectionEl.hidden = !isGameplay;
     }
     if (this.multiplayerPanelsEl) {
       this.multiplayerPanelsEl.hidden = this.hubView !== "multiplayer";
