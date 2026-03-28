@@ -2353,7 +2353,15 @@ div.cell {
   border-bottom: none;
 }
 
-.modal-export-btn {
+.win-split-hru {
+  color: #8aafcc;
+  font-size: 0.85em;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.modal-export-btn,
+.modal-share-daily-btn {
   width: 100%;
   margin-top: 10px;
 }

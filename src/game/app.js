@@ -115,6 +115,7 @@ export class OneStrokeApp {
     this.modalNextBtn = document.getElementById("modalNextBtn");
     this.modalCloseBtn = document.getElementById("modalCloseBtn");
     this.modalExportMatchBtn = document.getElementById("modalExportMatchBtn");
+    this.modalShareDailyBtn = document.getElementById("modalShareDailyBtn");
     this.modalExportConfirmEl = document.getElementById("modalExportConfirm");
     this.winSplitTableEl = document.getElementById("winSplitTable");
     this.campaignModeBtn = document.getElementById("campaignModeBtn");
@@ -322,6 +323,7 @@ export class OneStrokeApp {
         this.modalExportConfirmEl.hidden = false;
       }
     });
+    this.modalShareDailyBtn?.addEventListener("click", () => this.shareDailyResult());
 
     this.campaignModeBtn.addEventListener("click", () => {
       this.closeMobilePanel();
@@ -2519,6 +2521,16 @@ export class OneStrokeApp {
     this.setStatus(winMsg, "win");
 
     const timingText = `${toDisplayTime(durationMs)} · ${result.undoCount} undo · ${result.resetCount} reset · ${result.hintCount} hint`;
+    const fmtPenalty = (count, perUnit) => {
+      const total = count * perUnit;
+      return total > 0 ? ` (+${toDisplayDecimal(total, 1)}s)` : "";
+    };
+    const challengeStatsText = [
+      toDisplayTime(durationMs),
+      `${result.hintCount} hint${fmtPenalty(result.hintCount, CHALLENGE_HINT_PENALTY)}`,
+      `${result.resetCount} reset${fmtPenalty(result.resetCount, CHALLENGE_RESET_PENALTY_SECONDS)}`,
+      `${result.undoCount} undo${fmtPenalty(result.undoCount, CHALLENGE_UNDO_PENALTY_SECONDS)}`,
+    ].join(" · ");
     if (this.state.mode === "campaign") {
       this.showModal(
         hasNext
@@ -2547,6 +2559,9 @@ export class OneStrokeApp {
           score: split?.score ?? null,
           opponentTimeMs: opponent?.durationMs ?? null,
           current: level.id === this.state.level.id,
+          hintCount: res?.hintCount ?? null,
+          resetCount: res?.resetCount ?? null,
+          undoCount: res?.undoCount ?? null,
         };
       });
 
@@ -2560,7 +2575,7 @@ export class OneStrokeApp {
           deltaText = Math.abs(diffMs) < 100 ? " · Lika!" : ` · ${sign}${sec}s`;
         }
         this.showModal(
-          `Bana ${this.challenge.cursor + 1}/${totalLevels} klarad. ${timingText}. Split ${toDisplayScore(splitScore)} p${deltaText}`,
+          `Bana ${this.challenge.cursor + 1}/${totalLevels} klarad. ${challengeStatsText}. Split ${toDisplayScore(splitScore)} p${deltaText}`,
           true,
           { splits: modalSplits },
         );
@@ -2568,7 +2583,7 @@ export class OneStrokeApp {
         this.showModal(
           `Match klar! ${solvedCount}/${totalLevels} banor · ${toDisplayScore(summary.totalScore)} p · ${toDisplayTime(summary.totalTimeMs)}`,
           false,
-          { title: "Match klar!", splits: modalSplits },
+          { title: this.dailyMode ? "Dagens utmaning klar!" : "Match klar!", splits: modalSplits, showDailyShare: this.dailyMode },
         );
         // Transition to share phase
         this.setMatchPhase("share");
@@ -2909,7 +2924,7 @@ export class OneStrokeApp {
   }
 
   showModal(text, showNext, options = {}) {
-    const { showMatchExport = false, title = "Bana klar", splits = null } = options;
+    const { showMatchExport = false, showDailyShare = false, title = "Bana klar", splits = null } = options;
     this.winModalEl.querySelector("#winTitle").textContent = title;
     this.winTextEl.textContent = text;
     this.modalNextBtn.hidden = !showNext;
@@ -2917,6 +2932,9 @@ export class OneStrokeApp {
     this.modalResetBtn.hidden = this.state.mode === "challenge";
     if (this.modalExportMatchBtn) {
       this.modalExportMatchBtn.hidden = !showMatchExport;
+    }
+    if (this.modalShareDailyBtn) {
+      this.modalShareDailyBtn.hidden = !showDailyShare;
     }
     if (this.modalExportConfirmEl) {
       this.modalExportConfirmEl.hidden = true;
@@ -2946,7 +2964,7 @@ export class OneStrokeApp {
     const headRow = document.createElement("tr");
     const headers = hasOpponent
       ? ["#", "Du", "Poäng", "Motst.", "Diff"]
-      : ["#", "Tid", "Poäng"];
+      : ["#", "Tid", "Poäng", "H/R/U"];
     for (const label of headers) {
       const th = document.createElement("th");
       th.textContent = label;
@@ -2979,6 +2997,17 @@ export class OneStrokeApp {
       tdScore.textContent = split.score != null ? toDisplayScore(split.score) : "—";
 
       tr.append(tdIndex, tdTime, tdScore);
+
+      if (!hasOpponent) {
+        const tdHRU = document.createElement("td");
+        tdHRU.className = "win-split-hru";
+        if (split.timeMs != null) {
+          tdHRU.textContent = `${split.hintCount ?? 0}/${split.resetCount ?? 0}/${split.undoCount ?? 0}`;
+        } else {
+          tdHRU.textContent = "—";
+        }
+        tr.append(tdHRU);
+      }
 
       if (hasOpponent) {
         const tdOpponent = document.createElement("td");
@@ -3023,6 +3052,16 @@ export class OneStrokeApp {
     const tdTotalScore = document.createElement("td");
     tdTotalScore.textContent = toDisplayScore(runningScore);
     totalRow.append(tdLabel, tdTotalTime, tdTotalScore);
+
+    if (!hasOpponent) {
+      const totH = splits.reduce((a, s) => a + (s.hintCount ?? 0), 0);
+      const totR = splits.reduce((a, s) => a + (s.resetCount ?? 0), 0);
+      const totU = splits.reduce((a, s) => a + (s.undoCount ?? 0), 0);
+      const tdHRUTotal = document.createElement("td");
+      tdHRUTotal.className = "win-split-hru";
+      tdHRUTotal.textContent = `${totH}/${totR}/${totU}`;
+      totalRow.append(tdHRUTotal);
+    }
 
     if (hasOpponent) {
       const tdOpponentTotal = document.createElement("td");
