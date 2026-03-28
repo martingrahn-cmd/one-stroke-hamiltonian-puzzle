@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const CAMPAIGN_SEED = "one-stroke-campaign-v2";
+const CAMPAIGN_SEED = "one-stroke-campaign-v3";
 const OUTPUT_FILE = path.resolve(__dirname, "../src/data/campaign-levels.js");
 
 const DIFFICULTY_SPECS = [
@@ -52,6 +52,8 @@ const DIFFICULTY_SPECS = [
     maxStraightRunRatio: 0.47,
     pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "inside-out"],
     fixedEndRatio: 0.5,
+    shapes: ["L-shape", "cross", "diamond"],
+    shapedLevelRatio: 0.3,
   },
   {
     id: "hard",
@@ -75,6 +77,8 @@ const DIFFICULTY_SPECS = [
     maxStraightRunRatio: 0.4,
     pathProfiles: ["balanced", "center-weave", "edge-dive", "zigzag", "branch-hunter", "inside-out"],
     fixedEndRatio: 0.7,
+    shapes: ["L-shape", "T-shape", "U-shape", "cross", "diamond"],
+    shapedLevelRatio: 0.4,
   },
   {
     id: "very-hard",
@@ -98,6 +102,7 @@ const DIFFICULTY_SPECS = [
     maxStraightRunRatio: 0.34,
     pathProfiles: ["center-weave", "edge-dive", "zigzag", "branch-hunter", "inside-out"],
     fixedEndRatio: 1.0,
+    // Very-hard: shapes skipped — fixed endpoints + large grids + inside-out provide enough challenge
   },
 ];
 
@@ -233,21 +238,212 @@ function shuffle(array, random) {
   }
 }
 
-function neighbors(x, y, width, height) {
+function neighbors(x, y, width, height, forbiddenSet) {
   const result = [];
-  if (x > 0) {
+  if (x > 0 && (!forbiddenSet || !forbiddenSet.has(key(x - 1, y)))) {
     result.push([x - 1, y]);
   }
-  if (x < width - 1) {
+  if (x < width - 1 && (!forbiddenSet || !forbiddenSet.has(key(x + 1, y)))) {
     result.push([x + 1, y]);
   }
-  if (y > 0) {
+  if (y > 0 && (!forbiddenSet || !forbiddenSet.has(key(x, y - 1)))) {
     result.push([x, y - 1]);
   }
-  if (y < height - 1) {
+  if (y < height - 1 && (!forbiddenSet || !forbiddenSet.has(key(x, y + 1)))) {
     result.push([x, y + 1]);
   }
   return result;
+}
+
+// ── Shape generators ──────────────────────────────────────
+// Each returns a Set<string> of playable cell keys for the given grid.
+
+function bandWidth(dim) {
+  // Wider bands to ensure shapes produce enough playable cells
+  if (dim <= 4) return 2;
+  if (dim <= 5) return 2;
+  if (dim <= 6) return 3;
+  return Math.max(3, Math.ceil(dim / 2.5));
+}
+
+function generateShapeMask(shapeId, width, height, random) {
+  const generators = {
+    "L-shape": shapeLGenerator,
+    "T-shape": shapeTGenerator,
+    "U-shape": shapeUGenerator,
+    "cross": shapeCrossGenerator,
+    "diamond": shapeDiamondGenerator,
+    "Z-shape": shapeZGenerator,
+    "H-shape": shapeHGenerator,
+  };
+  const generator = generators[shapeId];
+  if (!generator) return null;
+  return generator(width, height, random);
+}
+
+function shapeLGenerator(width, height, random) {
+  const playable = new Set();
+  // Cut one quadrant. Pick which corner to remove.
+  const corner = Math.floor(random() * 4);
+  const cutW = Math.max(2, Math.floor(width * (0.35 + random() * 0.15)));
+  const cutH = Math.max(2, Math.floor(height * (0.35 + random() * 0.15)));
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let inCut = false;
+      if (corner === 0) inCut = x >= width - cutW && y < cutH;           // top-right
+      else if (corner === 1) inCut = x < cutW && y < cutH;               // top-left
+      else if (corner === 2) inCut = x < cutW && y >= height - cutH;     // bottom-left
+      else inCut = x >= width - cutW && y >= height - cutH;              // bottom-right
+      if (!inCut) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeTGenerator(width, height, random) {
+  const playable = new Set();
+  const bw = bandWidth(width);
+  const bh = bandWidth(height);
+  // Rotate: 0=top bar + center column, 1=left column + center row, etc.
+  const rotation = Math.floor(random() * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let keep = false;
+      const cx = Math.floor((width - bw) / 2);
+      const cy = Math.floor((height - bh) / 2);
+      if (rotation === 0) keep = y < bh || (x >= cx && x < cx + bw);                 // top bar + vertical stem
+      else if (rotation === 1) keep = x < bw || (y >= cy && y < cy + bh);             // left bar + horizontal stem
+      else if (rotation === 2) keep = y >= height - bh || (x >= cx && x < cx + bw);   // bottom bar + vertical stem
+      else keep = x >= width - bw || (y >= cy && y < cy + bh);                        // right bar + horizontal stem
+      if (keep) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeUGenerator(width, height, random) {
+  const playable = new Set();
+  const bw = bandWidth(width);
+  const bh = bandWidth(height);
+  // Rotation: which side is open
+  const rotation = Math.floor(random() * 4);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let keep = false;
+      if (rotation === 0) {
+        // open top: left pillar + right pillar + bottom bar
+        keep = x < bw || x >= width - bw || y >= height - bh;
+      } else if (rotation === 1) {
+        // open right: top bar + bottom bar + left column
+        keep = y < bh || y >= height - bh || x < bw;
+      } else if (rotation === 2) {
+        // open bottom: left pillar + right pillar + top bar
+        keep = x < bw || x >= width - bw || y < bh;
+      } else {
+        // open left: top bar + bottom bar + right column
+        keep = y < bh || y >= height - bh || x >= width - bw;
+      }
+      if (keep) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeCrossGenerator(width, height, random) {
+  const playable = new Set();
+  const bw = bandWidth(width);
+  const bh = bandWidth(height);
+  const cx = Math.floor((width - bw) / 2);
+  const cy = Math.floor((height - bh) / 2);
+  // Optional offset for asymmetry
+  const offsetX = random() < 0.3 ? (random() < 0.5 ? -1 : 1) : 0;
+  const adjCx = clamp(cx + offsetX, 0, width - bw);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const inHorizontal = y >= cy && y < cy + bh;
+      const inVertical = x >= adjCx && x < adjCx + bw;
+      if (inHorizontal || inVertical) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeDiamondGenerator(width, height, random) {
+  const playable = new Set();
+  const centerX = (width - 1) / 2;
+  const centerY = (height - 1) / 2;
+  // Radius: manhattan distance threshold
+  const maxRadius = Math.floor(Math.min(width, height) / 2);
+  const radius = maxRadius + (random() < 0.4 ? -0.5 : 0);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const dist = Math.abs(x - centerX) + Math.abs(y - centerY);
+      if (dist <= radius) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeZGenerator(width, height, random) {
+  const playable = new Set();
+  const bh = bandWidth(height);
+  const diagWidth = Math.max(2, bandWidth(Math.min(width, height)));
+  // Mirror: Z or S
+  const mirror = random() < 0.5;
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const inTopBar = y < bh;
+      const inBottomBar = y >= height - bh;
+      // Diagonal band connecting top-right to bottom-left (or mirrored)
+      const t = height > 1 ? y / (height - 1) : 0.5;
+      const diagCenter = mirror ? t * (width - 1) : (1 - t) * (width - 1);
+      const inDiag = Math.abs(x - diagCenter) < diagWidth / 2 + 0.5;
+      if (inTopBar || inBottomBar || inDiag) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function shapeHGenerator(width, height, random) {
+  const playable = new Set();
+  const bw = bandWidth(width);
+  const bh = bandWidth(height);
+  const cy = Math.floor((height - bh) / 2);
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const inLeftPillar = x < bw;
+      const inRightPillar = x >= width - bw;
+      const inBridge = y >= cy && y < cy + bh;
+      if (inLeftPillar || inRightPillar || inBridge) playable.add(key(x, y));
+    }
+  }
+  return playable;
+}
+
+function isShapeConnected(playableSet, width, height) {
+  if (playableSet.size === 0) return false;
+  const start = playableSet.values().next().value;
+  const visited = new Set([start]);
+  const queue = [start];
+  while (queue.length > 0) {
+    const current = queue.shift();
+    const [cx, cy] = parse(current);
+    for (const [nx, ny] of neighbors(cx, cy, width, height)) {
+      const nk = key(nx, ny);
+      if (playableSet.has(nk) && !visited.has(nk)) {
+        visited.add(nk);
+        queue.push(nk);
+      }
+    }
+  }
+  return visited.size === playableSet.size;
 }
 
 function clamp(value, min, max) {
@@ -276,12 +472,13 @@ function directionDeltaByKeys(fromKey, toKey) {
   return [toX - fromX, toY - fromY];
 }
 
-function getStartCandidates(width, height, zone) {
+function getStartCandidates(width, height, zone, forbiddenSet) {
   const candidates = [];
   const minInteriorLayer = Math.max(1, Math.floor((Math.min(width, height) - 1) / 3));
 
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
+      if (forbiddenSet && forbiddenSet.has(key(x, y))) continue;
       const onBorder = isBorderCell(x, y, width, height);
       const interiorDepth = borderDistance(x, y, width, height);
 
@@ -295,14 +492,23 @@ function getStartCandidates(width, height, zone) {
     }
   }
 
+  // For shaped boards with "center"/"edge" zone, fall back to any playable cell
+  if (candidates.length === 0 && forbiddenSet) {
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        if (!forbiddenSet.has(key(x, y))) candidates.push([x, y]);
+      }
+    }
+  }
+
   return candidates;
 }
 
-function chooseStartCoord(width, height, random, zone) {
+function chooseStartCoord(width, height, random, zone, forbiddenSet) {
   if (zone === "edge-or-center") {
     const preferEdge = random() < 0.58;
-    const edgeCandidates = getStartCandidates(width, height, "edge");
-    const centerCandidates = getStartCandidates(width, height, "center");
+    const edgeCandidates = getStartCandidates(width, height, "edge", forbiddenSet);
+    const centerCandidates = getStartCandidates(width, height, "center", forbiddenSet);
     const mixed = preferEdge ? edgeCandidates : centerCandidates;
     const fallback = preferEdge ? centerCandidates : edgeCandidates;
     const pool = mixed.length > 0 ? mixed : fallback;
@@ -311,7 +517,7 @@ function chooseStartCoord(width, height, random, zone) {
     }
   }
 
-  const candidates = getStartCandidates(width, height, zone);
+  const candidates = getStartCandidates(width, height, zone, forbiddenSet);
   if (candidates.length > 0) {
     return candidates[Math.floor(random() * candidates.length)];
   }
@@ -364,39 +570,54 @@ function scorePathOption({
   );
 }
 
-function generateSelfAvoidingPath(width, height, length, random, pathProfile, maxAttempts = 260) {
+function generateSelfAvoidingPath(width, height, length, random, pathProfile, maxAttempts = 260, forbiddenSet) {
   if (length > width * height) {
     return null;
   }
 
   const profile = pathProfile ?? PATH_STYLE_PROFILE_BY_ID.balanced;
+  // Limit backtracking steps per attempt to prevent exponential blowup on shaped grids
+  const maxBacktrackSteps = length * length * 4;
+
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const [startX, startY] = chooseStartCoord(width, height, random, profile.startZone);
+    const [startX, startY] = chooseStartCoord(width, height, random, profile.startZone, forbiddenSet);
+    if (forbiddenSet && forbiddenSet.has(key(startX, startY))) continue;
     const path = [key(startX, startY)];
     const visited = new Set(path);
     let borderVisitedCount = isBorderCell(startX, startY, width, height) ? 1 : 0;
+    let steps = 0;
 
     const buildPath = () => {
       if (path.length === length) {
         return true;
+      }
+      if (++steps > maxBacktrackSteps) {
+        return false;
       }
 
       const [currentX, currentY] = parse(path[path.length - 1]);
       const prevKey = path.length >= 2 ? path[path.length - 2] : null;
       const prevDelta = prevKey ? directionDeltaByKeys(prevKey, path[path.length - 1]) : null;
       const options = [];
-      for (const [nextX, nextY] of neighbors(currentX, currentY, width, height)) {
+      for (const [nextX, nextY] of neighbors(currentX, currentY, width, height, forbiddenSet)) {
         const nextKey = key(nextX, nextY);
         if (visited.has(nextKey)) {
           continue;
         }
         let onwardCount = 0;
-        for (const [testX, testY] of neighbors(nextX, nextY, width, height)) {
+        for (const [testX, testY] of neighbors(nextX, nextY, width, height, forbiddenSet)) {
           const testKey = key(testX, testY);
           if (!visited.has(testKey) && testKey !== nextKey) {
             onwardCount += 1;
           }
         }
+
+        // Early pruning: if a neighbor with degree 1 exists and we're not going there, skip
+        // (it will become unreachable if we go elsewhere)
+        if (onwardCount === 0 && path.length + 1 < length) {
+          continue;
+        }
+
         const score = scorePathOption({
           currentX,
           currentY,
@@ -415,6 +636,33 @@ function generateSelfAvoidingPath(width, height, length, random, pathProfile, ma
       }
 
       options.sort((a, b) => b.score - a.score);
+
+      // Check if any unvisited neighbor has become isolated (degree 0 but path not complete)
+      // If so, we must visit that neighbor next or this branch is dead
+      if (path.length + 1 < length) {
+        const [cx, cy] = parse(path[path.length - 1]);
+        for (const [nx, ny] of neighbors(cx, cy, width, height, forbiddenSet)) {
+          const nk = key(nx, ny);
+          if (visited.has(nk)) continue;
+          let deg = 0;
+          for (const [tx, ty] of neighbors(nx, ny, width, height, forbiddenSet)) {
+            if (!visited.has(key(tx, ty))) deg++;
+          }
+          if (deg === 0) {
+            // This neighbor will be stranded — only valid if it's the last cell
+            if (path.length + 1 === length - 1) {
+              // Force visiting it
+              const forced = options.find(o => o.key === nk);
+              if (forced) {
+                options.length = 0;
+                options.push(forced);
+              }
+            } else {
+              return false; // Dead branch
+            }
+          }
+        }
+      }
 
       for (const option of options) {
         const nextOnBorder = isBorderCell(option.nextX, option.nextY, width, height);
@@ -683,26 +931,54 @@ function generateCampaignLevels(seed) {
     console.log(`Generating ${spec.count} levels for ${spec.id}...`);
     for (let difficultyIndex = 1; difficultyIndex <= spec.count; difficultyIndex += 1) {
       let level = null;
-      for (let attempt = 0; attempt < 1450 && level === null; attempt += 1) {
+      const t0 = Date.now();
+      for (let attempt = 0; attempt < 2500 && level === null; attempt += 1) {
+        if (attempt > 0 && attempt % 500 === 0) {
+          console.log(`  ${spec.id} #${difficultyIndex}: ${attempt} attempts (${((Date.now() - t0) / 1000).toFixed(1)}s)...`);
+        }
         const [width, height] = spec.sizes[Math.floor(random() * spec.sizes.length)];
-        const maxOpen = Math.min(spec.openRange[1], width * height);
-        const minOpen = Math.min(spec.openRange[0], maxOpen);
-        const openCount = minOpen + Math.floor(random() * (maxOpen - minOpen + 1));
-        const openRatio = openCount / (width * height);
 
-        if (openRatio < (spec.minOpenRatio ?? 0)) {
-          continue;
+        // Decide: shaped or rectangular
+        const useShaped = spec.shapes && spec.shapedLevelRatio && random() < spec.shapedLevelRatio;
+        let openCount;
+        let forbiddenSet = null;
+        let shapeId = null;
+
+        if (useShaped) {
+          shapeId = spec.shapes[Math.floor(random() * spec.shapes.length)];
+          const playableSet = generateShapeMask(shapeId, width, height, random);
+          if (!playableSet || playableSet.size < (spec.openRange[0] ?? 10)) continue;
+          if (playableSet.size > spec.openRange[1]) continue;
+          if (!isShapeConnected(playableSet, width, height)) continue;
+
+          openCount = playableSet.size;
+          forbiddenSet = new Set();
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              if (!playableSet.has(key(x, y))) forbiddenSet.add(key(x, y));
+            }
+          }
+        } else {
+          const maxOpen = Math.min(spec.openRange[1], width * height);
+          const minOpen = Math.min(spec.openRange[0], maxOpen);
+          openCount = minOpen + Math.floor(random() * (maxOpen - minOpen + 1));
+          const openRatioCheck = openCount / (width * height);
+          if (openRatioCheck < (spec.minOpenRatio ?? 0)) continue;
         }
 
+        const openRatio = forbiddenSet ? 1.0 : openCount / (width * height);
+
         const pathProfile = pickPathProfile(spec, random, difficultyIndex, attempt);
-        const path = generateSelfAvoidingPath(width, height, openCount, random, pathProfile);
+        // Shaped levels need more attempts since Hamiltonian paths are harder to find on irregular graphs
+        const pathMaxAttempts = forbiddenSet ? 600 : 260;
+        const path = generateSelfAvoidingPath(width, height, openCount, random, pathProfile, pathMaxAttempts, forbiddenSet);
         if (!path) {
           continue;
         }
 
         const stats = getGraphStats(path, width, height);
         const pathMetrics = getPathShapeMetrics(path, width, height);
-        const strictness = attempt < 820 ? 1 : attempt < 1150 ? 0.78 : 0.55;
+        const strictness = attempt < 1000 ? 1 : attempt < 1700 ? 0.78 : 0.55;
         const requiredExtraEdges = Math.floor(spec.minExtraEdges * strictness);
         const requiredBranchNodes = Math.floor(spec.minBranchNodes * strictness);
         const requiredBranchingRatio = (spec.minBranchingRatio ?? 0) * strictness;
@@ -729,15 +1005,17 @@ function generateCampaignLevels(seed) {
             ? 1
             : clamp(spec.maxStraightRunRatio + (1 - strictness) * 0.22, 0, 1);
 
+        // Relax quality filters slightly for shaped levels (non-rectangular geometry naturally has different characteristics)
+        const shapeRelax = forbiddenSet ? 0.85 : 1;
         const qualityFilterSatisfied =
-          stats.extraEdges >= requiredExtraEdges &&
-          stats.branchNodes >= requiredBranchNodes &&
-          stats.branchingRatio >= requiredBranchingRatio &&
-          stats.corridorRatio <= allowedCorridorRatio &&
-          stats.deadEnds <= allowedDeadEnds &&
-          pathMetrics.turnRatio >= requiredTurnRatio &&
-          pathMetrics.layerSwitchRatio >= requiredLayerSwitchRatio &&
-          pathMetrics.perimeterRatio <= allowedPerimeterRatio &&
+          stats.extraEdges >= Math.floor(requiredExtraEdges * shapeRelax) &&
+          stats.branchNodes >= Math.floor(requiredBranchNodes * shapeRelax) &&
+          stats.branchingRatio >= requiredBranchingRatio * shapeRelax &&
+          stats.corridorRatio <= allowedCorridorRatio + (forbiddenSet ? 0.06 : 0) &&
+          stats.deadEnds <= allowedDeadEnds + (forbiddenSet ? 2 : 0) &&
+          pathMetrics.turnRatio >= requiredTurnRatio * shapeRelax &&
+          pathMetrics.layerSwitchRatio >= requiredLayerSwitchRatio * shapeRelax &&
+          pathMetrics.perimeterRatio <= allowedPerimeterRatio + (forbiddenSet ? 0.08 : 0) &&
           pathMetrics.maxMonotonicLayerRunRatio <= allowedMonotonicLayerRunRatio &&
           pathMetrics.maxStraightRunRatio <= allowedStraightRunRatio;
 
@@ -751,11 +1029,11 @@ function generateCampaignLevels(seed) {
           openRatio,
           stats,
           pathMetrics,
-          styleId: pathProfile.id,
+          styleId: shapeId ? `${pathProfile.id}:${shapeId}` : pathProfile.id,
           startKey: path[0],
         });
         const signatureCount = signatureCounts.get(variationSignature) ?? 0;
-        const allowedSignatureReuse = attempt < 900 ? 0 : attempt < 1220 ? 1 : 2;
+        const allowedSignatureReuse = attempt < 1100 ? 0 : attempt < 1800 ? 1 : 2;
         if (signatureCount > allowedSignatureReuse) {
           continue;
         }
@@ -771,7 +1049,8 @@ function generateCampaignLevels(seed) {
           }
         }
 
-        const useFixedEnd = spec.fixedEndRatio != null && random() < spec.fixedEndRatio;
+        // Don't combine shaped boards with fixed endpoints — each is challenging enough alone
+        const useFixedEnd = !shapeId && spec.fixedEndRatio != null && random() < spec.fixedEndRatio;
         const endCoord = parse(path[path.length - 1]);
         const startCoord = parse(path[0]);
 
@@ -795,6 +1074,7 @@ function generateCampaignLevels(seed) {
           start: startCoord,
           endMode: useFixedEnd ? "fixed" : "free",
           ...(useFixedEnd ? { end: endCoord } : {}),
+          ...(shapeId ? { shape: shapeId } : {}),
           par: openCount - 1,
           solution: toDirections(path),
           branchNodes: stats.branchNodes,
@@ -825,6 +1105,14 @@ function generateCampaignLevels(seed) {
       globalIndex += 1;
     }
   }
+
+  // Log shape distribution
+  const shapeCounts = {};
+  for (const l of levels) {
+    if (l.shape) shapeCounts[l.shape] = (shapeCounts[l.shape] ?? 0) + 1;
+  }
+  const shapedTotal = Object.values(shapeCounts).reduce((a, b) => a + b, 0);
+  console.log(`Shaped levels: ${shapedTotal}/${levels.length} — ${JSON.stringify(shapeCounts)}`);
 
   return levels;
 }
