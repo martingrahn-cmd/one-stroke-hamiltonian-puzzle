@@ -11,6 +11,7 @@ const CAMPAIGN_LEVELS = [
   ...GENERATED_LEVELS.slice(TUTORIAL_LEVELS.length),
 ];
 const CAMPAIGN_TOTAL_LEVELS = CAMPAIGN_LEVELS.length;
+
 import {
   coordKey,
   directionBetweenKeys,
@@ -36,6 +37,20 @@ import {
 import { checkRunResult } from "../core/plausibility.js";
 import { createMixedChallenge } from "./challenge-pool.js";
 import {
+  clamp,
+  todaySeed,
+  createRunId,
+  toDisplayTime,
+  toDisplayScore,
+  toDisplayDecimal,
+  toDisplayPercent,
+  toMachineDecimal,
+  toDisplaySignedScoreDelta,
+  toDisplaySignedTimeDelta,
+  toDisplayPenaltySeconds,
+  toDisplayDateTime,
+} from "./formatting.js";
+import {
   loadAchievementUnlocks,
   loadCampaignProgress,
   loadChallengeRunHistory,
@@ -43,6 +58,11 @@ import {
   saveCampaignProgress,
   saveChallengeRunHistory,
 } from "./storage.js";
+import {
+  TROPHY_TIER_ORDER,
+  TROPHY_TIER_META,
+  createTrophyCatalog,
+} from "./trophies.js";
 
 const LEVEL_FORMAT_VERSION = 2;
 const LOCAL_PLAYER_ID = "local-player";
@@ -59,345 +79,7 @@ const CHALLENGE_HISTORY_LIMIT = 20;
 const CHALLENGE_SUMMARY_SCHEMA_VERSION = 1;
 const CHALLENGE_SUMMARY_SCHEMA_KIND = "one-stroke.challenge-summary";
 
-const TROPHY_TIER_ORDER = ["bronze", "silver", "gold", "platinum"];
-const TROPHY_TIER_META = {
-  bronze: { label: "Brons", total: 15 },
-  silver: { label: "Silver", total: 10 },
-  gold: { label: "Guld", total: 5 },
-  platinum: { label: "Platinum", total: 1 },
-};
-const TROPHY_CATALOG = [
-  {
-    id: "b01",
-    tier: "bronze",
-    name: "Första steget",
-    description: "Lös 1 kampanjnivå.",
-    check: (metrics) => metrics.campaignSolvedCount >= 1,
-  },
-  {
-    id: "b02",
-    tier: "bronze",
-    name: "Femman",
-    description: "Lös 5 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 5,
-  },
-  {
-    id: "b03",
-    tier: "bronze",
-    name: "Tio avklarade",
-    description: "Lös 10 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 10,
-  },
-  {
-    id: "b04",
-    tier: "bronze",
-    name: "Tjugo avklarade",
-    description: "Lös 20 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 20,
-  },
-  {
-    id: "b05",
-    tier: "bronze",
-    name: "Trettio avklarade",
-    description: "Lös 30 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 30,
-  },
-  {
-    id: "b06",
-    tier: "bronze",
-    name: "10 spelade nivåer",
-    description: "Nå 10 spelade kampanjnivå-försök totalt.",
-    check: (metrics) => metrics.campaignPlayedCount >= 10,
-  },
-  {
-    id: "b07",
-    tier: "bronze",
-    name: "25 spelade nivåer",
-    description: "Nå 25 spelade kampanjnivå-försök totalt.",
-    check: (metrics) => metrics.campaignPlayedCount >= 25,
-  },
-  {
-    id: "b08",
-    tier: "bronze",
-    name: "Challenger",
-    description: "Spara din första challenge-run.",
-    check: (metrics) => metrics.challengeRunCount >= 1,
-  },
-  {
-    id: "b09",
-    tier: "bronze",
-    name: "Första full run",
-    description: "Slutför en hel 10-banors challenge.",
-    check: (metrics) => metrics.completedChallengeCount >= 1,
-  },
-  {
-    id: "b10",
-    tier: "bronze",
-    name: "Poäng 3k",
-    description: "Nå minst 3 000 poäng i en challenge-run.",
-    check: (metrics) => metrics.bestChallengeScore >= 3000,
-  },
-  {
-    id: "b11",
-    tier: "bronze",
-    name: "Poäng 5k",
-    description: "Nå minst 5 000 poäng i en challenge-run.",
-    check: (metrics) => metrics.bestChallengeScore >= 5000,
-  },
-  {
-    id: "b12",
-    tier: "bronze",
-    name: "Hintfri run",
-    description: "Slutför en challenge-run utan hints.",
-    check: (metrics) => metrics.noHintCompletedCount >= 1,
-  },
-  {
-    id: "b13",
-    tier: "bronze",
-    name: "Resetfri run",
-    description: "Slutför en challenge-run utan reset.",
-    check: (metrics) => metrics.noResetCompletedCount >= 1,
-  },
-  {
-    id: "b14",
-    tier: "bronze",
-    name: "Kontrollerad run",
-    description: "Slutför en challenge-run med max 20 undo.",
-    check: (metrics) => metrics.lowUndoCompletedCount >= 1,
-  },
-  {
-    id: "b15",
-    tier: "bronze",
-    name: "50 spelade nivåer",
-    description: "Nå 50 spelade kampanjnivå-försök totalt.",
-    check: (metrics) => metrics.campaignPlayedCount >= 50,
-  },
-  {
-    id: "s01",
-    tier: "silver",
-    name: "50 kampanjnivåer",
-    description: "Lös 50 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 50,
-  },
-  {
-    id: "s02",
-    tier: "silver",
-    name: "75 kampanjnivåer",
-    description: "Lös 75 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 75,
-  },
-  {
-    id: "s03",
-    tier: "silver",
-    name: "100 kampanjnivåer",
-    description: "Lös 100 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 100,
-  },
-  {
-    id: "s04",
-    tier: "silver",
-    name: "150 kampanjnivåer",
-    description: "Lös 150 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= 150,
-  },
-  {
-    id: "s05",
-    tier: "silver",
-    name: "3 fulla challenges",
-    description: "Slutför 3 hela challenge-runs.",
-    check: (metrics) => metrics.completedChallengeCount >= 3,
-  },
-  {
-    id: "s06",
-    tier: "silver",
-    name: "5 fulla challenges",
-    description: "Slutför 5 hela challenge-runs.",
-    check: (metrics) => metrics.completedChallengeCount >= 5,
-  },
-  {
-    id: "s07",
-    tier: "silver",
-    name: "Poäng 8k",
-    description: "Nå minst 8 000 poäng i en challenge-run.",
-    check: (metrics) => metrics.bestChallengeScore >= 8000,
-  },
-  {
-    id: "s08",
-    tier: "silver",
-    name: "Poäng 10k",
-    description: "Nå minst 10 000 poäng i en challenge-run.",
-    check: (metrics) => metrics.bestChallengeScore >= 10000,
-  },
-  {
-    id: "s09",
-    tier: "silver",
-    name: "Snabb run",
-    description: "Slutför en challenge-run under 6:00.",
-    check: (metrics) => Number.isFinite(metrics.bestChallengeTimeMs) && metrics.bestChallengeTimeMs <= 360_000,
-  },
-  {
-    id: "s10",
-    tier: "silver",
-    name: "No safety net",
-    description: "Slutför en challenge-run utan hint och reset.",
-    check: (metrics) => metrics.noHintNoResetCompletedCount >= 1,
-  },
-  {
-    id: "g01",
-    tier: "gold",
-    name: "Kampanj 200",
-    description: "Lös alla 200 kampanjnivåer.",
-    check: (metrics) => metrics.campaignSolvedCount >= CAMPAIGN_TOTAL_LEVELS,
-  },
-  {
-    id: "g02",
-    tier: "gold",
-    name: "10 fulla challenges",
-    description: "Slutför 10 hela challenge-runs.",
-    check: (metrics) => metrics.completedChallengeCount >= 10,
-  },
-  {
-    id: "g03",
-    tier: "gold",
-    name: "Poäng 12k",
-    description: "Nå minst 12 000 poäng i en challenge-run.",
-    check: (metrics) => metrics.bestChallengeScore >= 12000,
-  },
-  {
-    id: "g04",
-    tier: "gold",
-    name: "Elittempo",
-    description: "Slutför en challenge-run under 4:30.",
-    check: (metrics) => Number.isFinite(metrics.bestChallengeTimeMs) && metrics.bestChallengeTimeMs <= 270_000,
-  },
-  {
-    id: "g05",
-    tier: "gold",
-    name: "Perfekt run",
-    description: "Slutför en challenge-run med 0 hint, 0 reset och 0 undo.",
-    check: (metrics) => metrics.perfectCompletedCount >= 1,
-  },
-  {
-    id: "p01",
-    tier: "platinum",
-    name: "Platinum Path",
-    description: "Lås upp alla andra trophies.",
-    check: null,
-  },
-];
-
-const trophyDistribution = TROPHY_CATALOG.reduce((acc, trophy) => {
-  acc[trophy.tier] = (acc[trophy.tier] ?? 0) + 1;
-  return acc;
-}, {});
-if (
-  trophyDistribution.bronze !== TROPHY_TIER_META.bronze.total ||
-  trophyDistribution.silver !== TROPHY_TIER_META.silver.total ||
-  trophyDistribution.gold !== TROPHY_TIER_META.gold.total ||
-  trophyDistribution.platinum !== TROPHY_TIER_META.platinum.total
-) {
-  throw new Error("Trophy catalog must contain 15 bronze, 10 silver, 5 gold and 1 platinum.");
-}
-
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
-
-function todaySeed() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function createRunId() {
-  return `run-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
-}
-
-function toDisplayTime(ms) {
-  if (!Number.isFinite(ms)) {
-    return "--";
-  }
-  const totalSeconds = Math.round(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function toDisplayScore(value) {
-  return new Intl.NumberFormat("sv-SE").format(Math.round(value));
-}
-
-function toDisplayDecimal(value, fractionDigits = 1) {
-  if (!Number.isFinite(value)) {
-    return "--";
-  }
-  return new Intl.NumberFormat("sv-SE", {
-    minimumFractionDigits: fractionDigits,
-    maximumFractionDigits: fractionDigits,
-  }).format(value);
-}
-
-function toDisplayPercent(value) {
-  if (!Number.isFinite(value)) {
-    return "--";
-  }
-  return `${toDisplayDecimal(value, 1)}%`;
-}
-
-function toMachineDecimal(value, fractionDigits = 1) {
-  if (!Number.isFinite(value)) {
-    return "";
-  }
-  return Number(value).toFixed(fractionDigits);
-}
-
-function toDisplaySignedScoreDelta(value) {
-  if (!Number.isFinite(value)) {
-    return "--";
-  }
-  if (value === 0) {
-    return "PB";
-  }
-  const sign = value > 0 ? "+" : "-";
-  return `${sign}${toDisplayScore(Math.abs(value))} p`;
-}
-
-function toDisplaySignedTimeDelta(ms) {
-  if (!Number.isFinite(ms)) {
-    return "--";
-  }
-  if (ms === 0) {
-    return "PB";
-  }
-  const sign = ms > 0 ? "+" : "-";
-  return `${sign}${toDisplayTime(Math.abs(ms))}`;
-}
-
-function toDisplayPenaltySeconds(seconds) {
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return "+0.0s";
-  }
-  const formatted = new Intl.NumberFormat("sv-SE", {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1,
-  }).format(seconds);
-  return `+${formatted}s`;
-}
-
-function toDisplayDateTime(iso) {
-  if (!iso) {
-    return "--";
-  }
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) {
-    return "--";
-  }
-  return new Intl.DateTimeFormat("sv-SE", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
+const TROPHY_CATALOG = createTrophyCatalog(CAMPAIGN_TOTAL_LEVELS);
 
 export class OneStrokeApp {
   constructor() {
@@ -2679,7 +2361,7 @@ export class OneStrokeApp {
     if (this.state.mode === "challenge") {
       this.renderChallengeResults();
     }
-    this.setStatus("Banan återställd. Kör igen.");
+    this.setStatus(`Banan återställd. ${this.state.playableCount - 1} noder kvar. Kör igen.`);
   }
 
   handleWin() {
@@ -2909,9 +2591,14 @@ export class OneStrokeApp {
     this.renderState();
     this.flashInvalidBoard();
     this.boardEl.classList.add("board-lost");
-    this.setStatusWithActions(`Fastlåst: ${reason}`, "loss", [
+    const visited = this.state.visited.size;
+    const total = this.state.playableCount;
+    const pct = Math.round((visited / total) * 100);
+    const progress = `${visited}/${total} noder (${pct}%)`;
+    this.setStatusWithActions(`Fastlåst: ${reason} Täckt ${progress}.`, "loss", [
       { label: "Ångra (Z)", action: () => this.undo() },
       { label: "Starta om (R)", action: () => this.resetLevel() },
+      { label: "Hint (H)", action: () => { this.undo(); this.requestHint(); } },
     ]);
   }
 
