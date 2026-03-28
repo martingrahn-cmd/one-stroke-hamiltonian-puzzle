@@ -46,18 +46,18 @@
               <strong id="difficultyLabel">Easy</strong>
             </article>
             <article class="stat-card">
-              <span class="label">Kampanj</span>
-              <strong id="campaignProgressLabel">0 klara</strong>
-            </article>
-            <article class="stat-card">
               <span class="label">Besökta</span>
               <strong id="visitedLabel">1</strong>
             </article>
-            <article class="stat-card">
+            <article class="stat-card stat-card-secondary">
               <span class="label">Kvar</span>
               <strong id="remainingLabel">0</strong>
             </article>
-            <article class="stat-card">
+            <article class="stat-card stat-card-secondary">
+              <span class="label">Kampanj</span>
+              <strong id="campaignProgressLabel">0 klara</strong>
+            </article>
+            <article class="stat-card stat-card-secondary">
               <span class="label">Status</span>
               <strong id="phaseLabel">Spelar</strong>
             </article>
@@ -74,13 +74,13 @@
             <button id="nextBtn" type="button" class="primary">Nästa <kbd>N</kbd></button>
           </div>
 
-          <section class="panel-inset">
-            <h2>Regler</h2>
+          <details class="panel-inset rules-details">
+            <summary><h2>Regler</h2></summary>
             <p>Fri slutnod. Ingen specifik målcell krävs.</p>
             <p>Endast ortogonala steg.</p>
             <p>Backtracking endast ett steg bakåt längs vägen (dra bakåt eller Ångra).</p>
             <p>Hint visar nästa rekommenderade nod (utmaningsläge ger poängstraff).</p>
-          </section>
+          </details>
 
           <section id="singlePlayerLevelSection" class="panel-inset">
             <h2>Nivåer</h2>

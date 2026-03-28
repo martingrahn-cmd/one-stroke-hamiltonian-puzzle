@@ -390,6 +390,34 @@ button kbd {
   color: var(--text-soft);
 }
 
+/* Collapsible rules section */
+details.rules-details summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+details.rules-details summary::-webkit-details-marker {
+  display: none;
+}
+
+details.rules-details summary::after {
+  content: "▸";
+  font-size: 0.7em;
+  color: var(--text-soft);
+  transition: transform 0.2s;
+}
+
+details.rules-details[open] summary::after {
+  transform: rotate(90deg);
+}
+
+details.rules-details summary h2 {
+  margin: 0;
+}
+
 .challenge-panel {
   display: flex;
   flex-direction: column;
@@ -2533,6 +2561,20 @@ body:not(.mode-challenge) .blur-b {
   .app-shell {
     grid-template-columns: 1fr;
     width: min(920px, 94vw);
+  }
+
+  /* Board first in portrait / tablet */
+  .board-panel {
+    order: 1;
+  }
+
+  .sidebar {
+    order: 2;
+  }
+
+  /* Hide secondary stats on tablet to reduce clutter */
+  .stat-card-secondary {
+    display: none;
   }
 
   .board-help {
