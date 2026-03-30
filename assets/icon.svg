@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#08141b"/>
+  <g transform="translate(256,256)">
+    <!-- Grid dots -->
+    <circle cx="-80" cy="-80" r="18" fill="#1a3a4a"/>
+    <circle cx="0" cy="-80" r="18" fill="#1a3a4a"/>
+    <circle cx="80" cy="-80" r="18" fill="#1a3a4a"/>
+    <circle cx="-80" cy="0" r="18" fill="#1a3a4a"/>
+    <circle cx="0" cy="0" r="18" fill="#1a3a4a"/>
+    <circle cx="80" cy="0" r="18" fill="#1a3a4a"/>
+    <circle cx="-80" cy="80" r="18" fill="#1a3a4a"/>
+    <circle cx="0" cy="80" r="18" fill="#1a3a4a"/>
+    <circle cx="80" cy="80" r="18" fill="#1a3a4a"/>
+    <!-- Path line -->
+    <polyline points="-80,-80 0,-80 80,-80 80,0 0,0 -80,0 -80,80 0,80 80,80"
+              fill="none" stroke="#4fc5ff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Visited dots -->
+    <circle cx="-80" cy="-80" r="18" fill="#4fc5ff"/>
+    <circle cx="0" cy="-80" r="18" fill="#4fc5ff"/>
+    <circle cx="80" cy="-80" r="18" fill="#4fc5ff"/>
+    <circle cx="80" cy="0" r="18" fill="#4fc5ff"/>
+    <circle cx="0" cy="0" r="18" fill="#4fc5ff"/>
+    <circle cx="-80" cy="0" r="18" fill="#4fc5ff"/>
+    <circle cx="-80" cy="80" r="18" fill="#4fc5ff"/>
+    <circle cx="0" cy="80" r="18" fill="#4fc5ff"/>
+    <circle cx="80" cy="80" r="18" fill="#27dba4"/>
+    <!-- Start marker (ring) -->
+    <circle cx="-80" cy="-80" r="12" fill="none" stroke="#08141b" stroke-width="5"/>
+  </g>
+</svg>

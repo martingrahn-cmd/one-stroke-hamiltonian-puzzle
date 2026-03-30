@@ -1,0 +1,31 @@
+{
+  "name": "One Stroke – Hamiltonian Path Puzzle",
+  "short_name": "One Stroke",
+  "description": "Besök varje nod exakt en gång i en enda sammanhängande väg.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#08141b",
+  "theme_color": "#08141b",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["games", "puzzle"],
+  "lang": "sv",
+  "dir": "ltr"
+}
