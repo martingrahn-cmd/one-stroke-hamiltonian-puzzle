@@ -191,6 +191,10 @@ export class OneStrokeApp {
     this.mobilePanelBackdrop = document.getElementById("mobilePanelBackdrop");
     this.sidebarEl = document.getElementById("sidebar");
     this.mobilePanelOpen = false;
+    this.undoBtnMobile = document.getElementById("undoBtnMobile");
+    this.resetBtnMobile = document.getElementById("resetBtnMobile");
+    this.hintBtnMobile = document.getElementById("hintBtnMobile");
+    this.nextBtnMobile = document.getElementById("nextBtnMobile");
 
     // Phase-based multiplayer panels
     this.matchPhaseSetupEl = document.getElementById("matchPhaseSetup");
@@ -307,6 +311,10 @@ export class OneStrokeApp {
     this.resetBtn.addEventListener("click", () => this.resetLevel());
     this.hintBtn.addEventListener("click", () => this.requestHint());
     this.nextBtn.addEventListener("click", () => this.goToNextLevel());
+    this.undoBtnMobile?.addEventListener("click", () => this.undo());
+    this.resetBtnMobile?.addEventListener("click", () => this.resetLevel());
+    this.hintBtnMobile?.addEventListener("click", () => this.requestHint());
+    this.nextBtnMobile?.addEventListener("click", () => this.goToNextLevel());
     this.modalResetBtn.addEventListener("click", () => {
       this.hideModal();
       this.replayLevel();
