@@ -2675,26 +2675,17 @@ body:not(.mode-challenge) .blur-b {
     display: none;
   }
 
-  /* ── Sidebar → slide-up panel ── */
+  /* ── Sidebar → inline panel (replaces board when open) ── */
   .panel.sidebar {
-    position: fixed;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    left: 0;
-    right: 0;
-    z-index: 20;
-    max-height: 80dvh;
+    display: none;
+    order: 2;
     padding: 8px 14px 20px;
-    border-radius: 20px 20px 0 0;
-    border-bottom: none;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    background: transparent;
     overflow: auto;
     overscroll-behavior: contain;
-    transform: translateY(100%);
-    visibility: hidden;
-    transition: transform 0.3s cubic-bezier(0.22, 0.68, 0, 1),
-                visibility 0s 0.3s;
-    box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.5);
-    order: 2;
-    background: linear-gradient(165deg, #132f3e, #0c1e28);
   }
 
   .panel.sidebar::before {
@@ -2702,48 +2693,22 @@ body:not(.mode-challenge) .blur-b {
   }
 
   .panel.sidebar.mobile-panel-open {
-    transform: translateY(0);
-    visibility: visible;
-    transition: transform 0.3s cubic-bezier(0.22, 0.68, 0, 1),
-                visibility 0s 0s;
-  }
-
-  /* ── Drag handle ── */
-  .mobile-panel-handle {
     display: flex;
-    justify-content: center;
-    padding: 8px 0 4px;
-    cursor: grab;
+    order: 1;
   }
 
-  .mobile-panel-handle span {
-    display: block;
-    width: 36px;
-    height: 4px;
-    border-radius: 2px;
-    background: #4a6e7e;
-  }
-
-  /* ── Backdrop ── */
-  .mobile-panel-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    z-index: 19;
-    background: rgba(4, 12, 18, 0.55);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease;
-  }
-
-  .mobile-panel-backdrop.visible {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .mobile-panel-backdrop[hidden] {
+  .panel.sidebar.mobile-panel-open ~ .board-panel {
     display: none;
+  }
+
+  /* ── Drag handle: hide when inline ── */
+  .mobile-panel-handle {
+    display: none;
+  }
+
+  /* ── Backdrop: not needed for inline panel ── */
+  .mobile-panel-backdrop {
+    display: none !important;
   }
 
   /* ── Bottom tab bar ── */
