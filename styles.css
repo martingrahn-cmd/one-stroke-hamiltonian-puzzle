@@ -276,6 +276,11 @@ body::after {
   flex-wrap: wrap;
 }
 
+/* Mobile play controls: hidden on desktop */
+.mobile-play-controls {
+  display: none;
+}
+
 .hub-menu {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2775,7 +2780,21 @@ body:not(.mode-challenge) .blur-b {
     padding: 7px 6px;
   }
 
-  /* ── Play controls (undo/reset/etc) move to bottom of board area ── */
+  /* ── Mobile play controls below board ── */
+  .mobile-play-controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .mobile-play-controls button {
+    min-height: 40px;
+    font-size: 0.74rem;
+    padding: 8px 10px;
+  }
+
+  /* ── Sidebar button-row: keep for menu view ── */
   .button-row {
     gap: 6px;
   }
