@@ -2613,17 +2613,17 @@ body:not(.mode-challenge) .blur-b {
 @media (max-width: 760px) {
   /* ── Body padding for tab-bar ── */
   body {
-    padding-bottom: 60px;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
   }
 
   /* ── App shell: single column, board first ── */
   .app-shell {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
+    grid-template-rows: auto;
     width: 100%;
     margin: 0;
     gap: 0;
-    min-height: calc(100dvh - 60px);
+    min-height: 0;
   }
 
   /* ── Board panel: full-screen ── */
@@ -2679,7 +2679,7 @@ body:not(.mode-challenge) .blur-b {
   /* ── Sidebar → slide-up panel ── */
   .panel.sidebar {
     position: fixed;
-    bottom: 60px;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     left: 0;
     right: 0;
     z-index: 20;
@@ -2725,7 +2725,7 @@ body:not(.mode-challenge) .blur-b {
     display: block;
     position: fixed;
     inset: 0;
-    bottom: 60px;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
     z-index: 19;
     background: rgba(4, 12, 18, 0.55);
     opacity: 0;
