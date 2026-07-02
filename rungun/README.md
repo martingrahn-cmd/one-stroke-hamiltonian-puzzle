@@ -34,8 +34,9 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
 - **Sektor 1: Jungle Extraction** — en handbyggd bana (~200 tiles) med
   plattformar, lådor, spikfällor, stup och en extraktionszon med väntande
   helikopter i slutet.
-- **Fiender**: patrullerande soldater (samma spritesheet, röd-tintad i runtime)
-  som siktar och skjuter i bursts, samt svävande vaktdrönare.
+- **Fiender**: patrullerande **Renegade Grunts** (egen spritesheet:
+  `assets/grunt.png` — idle, gång, skott med mynningsflamma och en dramatisk
+  death-sekvens som spelas när de stupar), samt svävande vaktdrönare.
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
 - **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
   i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.
@@ -62,5 +63,7 @@ delar ihopvuxna blobbar och paketerar om allt till en jämn 8×3-sheet
 
 - `index.html` — skal + canvas
 - `game.js` — hela spelet (motor, fysik, AI, rendering, ljud, UI)
-- `assets/commando.png` — ompaketerad spritesheet med alfakanal
-- `tools/extract_sprites.py` — sprite-extraktion från originalbilden
+- `assets/commando.png` — spelarens spritesheet (ompaketerad, med alfa)
+- `assets/grunt.png` — fiendens spritesheet (Renegade Grunt: idle 0–1,
+  skott 2–3, sikte 4–5, gång 8–13, death 16–21; ritad vänstervänd)
+- `tools/extract_sprites.py` — sprite-extraktion från originalbilderna

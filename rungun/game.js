@@ -22,6 +22,16 @@ const F = {
 const RUN_FRAMES = [8, 9, 10, 11, 12, 13, 14, 15];
 const FLIP_FRAMES = [20, 21, 22, 16];
 
+// Fiende: Renegade Grunt (assets/grunt.png, 6 använda kolumner per rad,
+// packad i samma 8-kolumners 48x64-grid). OBS: ritad vänstervänd.
+const GR = {
+  IDLE: [0, 1],        // arg breathing
+  FIRE: [2, 3],        // skott med mynningsflamma
+  AIM: 4,
+  WALK0: 8, WALKN: 6,  // gångcykel 8-13
+  DEATH0: 16, DEATHN: 6, // death-sekvens 16-21
+};
+
 // ---- Nivå ----------------------------------------------------------------
 // #=mark  C=låda  B=metall  ==plattform(one-way)  S=spikar  E=fiende  D=drönare
 // M=medkit  *=stjärna  P=spelarstart  F=extraktion
@@ -162,16 +172,9 @@ canvas.addEventListener('touchcancel', updateTouches, { passive: false });
 // ---- Tillgångar -----------------------------------------------------------
 const sheet = new Image();
 sheet.src = 'assets/commando.png';
-let enemySheet = null;
+const gruntSheet = new Image();
+gruntSheet.src = 'assets/grunt.png';
 sheet.onload = () => {
-  const c = document.createElement('canvas');
-  c.width = sheet.width; c.height = sheet.height;
-  const g = c.getContext('2d');
-  g.drawImage(sheet, 0, 0);
-  g.globalCompositeOperation = 'source-atop';
-  g.fillStyle = 'rgba(230, 40, 40, 0.42)';
-  g.fillRect(0, 0, c.width, c.height);
-  enemySheet = c;
   buildTerrain();
   buildParallax();
 };
@@ -373,7 +376,7 @@ function makeEnemy(x, y) {
   return {
     x, y, vx: 0, vy: 0, w: 18, h: 46,
     facing: -1, grounded: false,
-    hp: 3, hitT: 0, state: 'patrol',
+    hp: 3, hitT: 0, state: 'patrol', dieT: -1,
     aimT: 0, burst: 0, burstT: 0, cool: 1 + Math.random(),
     animT: Math.random() * 10, home: x,
   };
@@ -521,7 +524,14 @@ function hurtPlayer(p, dmg, kbx, silentPos) {
 
 // ---- Fiender -------------------------------------------------------------
 function updateEnemy(e, dt, p) {
-  if (e.hp <= 0) return;
+  if (e.hp <= 0) {
+    // death-animation: låt kroppen falla klart, spela sekvensen, ligg kvar en stund
+    if (e.dieT >= 0) e.dieT += dt;
+    e.vx = 0;
+    e.vy += GRAV * dt;
+    moveBody(e, dt, true);
+    return;
+  }
   e.hitT = Math.max(0, e.hitT - dt);
   const dx = p.x - e.x, dy = p.y - e.y;
   const sees = Math.abs(dx) < 300 && Math.abs(dy) < 70 && game.state === 'play' && p.inv < 1.0;
@@ -616,7 +626,10 @@ function updateBullets(dt, p) {
 }
 function killEnemy(e) {
   game.kills++; game.score += 100;
-  killBoom(e.x, e.y - 20);
+  e.dieT = 0;
+  SFX.edie();
+  game.shake = Math.max(game.shake, 3);
+  spawnSparks(e.x, e.y - 30, 10, '#a3232b'); // träffreaktionen sköter resten
 }
 function killBoom(x, y) {
   SFX.edie();
@@ -686,9 +699,13 @@ function playerFrame(p) {
   return Math.sin(p.animT * 2.4) > 0.65 ? F.RAISED : F.IDLE;
 }
 function enemyFrame(e) {
-  if (e.state === 'aim') return e.flashT > 0 ? F.FLASH : F.AIM;
-  if (Math.abs(e.vx) > 10) return RUN_FRAMES[Math.floor(e.animT * 9) % 8];
-  return F.IDLE;
+  if (e.hp <= 0) return GR.DEATH0 + Math.min(GR.DEATHN - 1, Math.floor(e.dieT * 10));
+  if (e.state === 'aim') {
+    if (e.flashT > 0) return GR.FIRE[Math.floor(e.animT * 20) % 2];
+    return GR.AIM;
+  }
+  if (Math.abs(e.vx) > 10) return GR.WALK0 + Math.floor(e.animT * 10) % GR.WALKN;
+  return GR.IDLE[Math.floor(e.animT * 4) % 2];
 }
 
 function render() {
@@ -777,10 +794,12 @@ function render() {
 
   // fiender
   for (const e of game.enemies) {
-    if (e.hp <= 0) continue;
-    if (enemySheet) {
-      if (e.hitT > 0) { ctx.globalAlpha = 0.6; }
-      drawFrame(enemySheet, enemyFrame(e), e.x, e.y, e.facing < 0);
+    if (e.hp <= 0 && (e.dieT < 0 || e.dieT > 2.6)) continue; // borttagen efter uttoning
+    if (gruntSheet.complete && gruntSheet.naturalWidth) {
+      if (e.hitT > 0) ctx.globalAlpha = 0.6;
+      else if (e.hp <= 0 && e.dieT > 1.8) ctx.globalAlpha = Math.max(0, 1 - (e.dieT - 1.8) / 0.8);
+      // grunten är ritad vänstervänd — flippa när den ska titta åt höger
+      drawFrame(gruntSheet, enemyFrame(e), e.x, e.y, e.facing > 0);
       ctx.globalAlpha = 1;
     }
   }
