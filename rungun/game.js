@@ -10,6 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
+const BUILD = 'v5'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames (index i 8-kolumners grid) --------------------------
@@ -1125,6 +1126,10 @@ function drawTitle() {
   panel(0.55);
   bigText('COMMANDO STRIKE', 120, 38, '#ffd25e', '#ff8c42');
   bigText('RUN & GUN — PROTOTYP · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#ffb0a0');
+  ctx.textAlign = 'right';
+  ctx.font = 'bold 9px monospace';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillText('BUILD ' + BUILD, W - 8, H - 8);
   if (sheet.complete && sheet.naturalWidth) {
     const fi = RUN_FRAMES[Math.floor(game.time * 12) % 8];
     ctx.save(); ctx.translate(W / 2, 235); ctx.scale(1.6, 1.6);
