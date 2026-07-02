@@ -94,6 +94,7 @@ const SFX = {
   edie()    { noiseBurst(0.25, 0.16); blip('sawtooth', 160, 40, 0.3, 0.12); },
   pickup()  { blip('sine', 880, 1400, 0.09, 0.10); setTimeout(() => blip('sine', 1200, 1800, 0.08, 0.08), 60); },
   heal()    { blip('sine', 520, 1040, 0.15, 0.10); },
+  power()   { [440, 554, 659, 880].forEach((f, i) => setTimeout(() => blip('square', f, f * 1.1, 0.1, 0.09), i * 70)); },
   win()     { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => blip('square', f, f, 0.18, 0.09), i * 130)); },
   dead()    { [330, 262, 196, 131].forEach((f, i) => setTimeout(() => blip('sawtooth', f, f * 0.9, 0.22, 0.10), i * 160)); },
 };
@@ -323,6 +324,11 @@ function startGame() {
       else if (c === 'F') { game.finishX = cx; game.finishY = cy; }
     }
   }
+  // power-ups (världskoordinater: ovanför marken vid strategiska punkter)
+  game.pickups.push({ type: 'spread', x: 24 * TILE + 16, y: 10 * TILE - 22, t: 0 });
+  game.pickups.push({ type: 'spread', x: 100 * TILE + 16, y: 10 * TILE - 22, t: 2 });
+  game.pickups.push({ type: 'shield', x: 131 * TILE + 16, y: 10 * TILE - 22, t: 4 });
+
   game.player = makePlayer(px, py);
   game.safe = { x: px, y: py };
 }
@@ -335,6 +341,7 @@ function makePlayer(x, y) {
     flipT: -1, landT: 0, crouch: false,
     fireT: 0, flashT: 0,
     hp: 5, maxHp: 5, inv: 0,
+    spreadT: 0, shieldT: 0,
     animT: 0,
   };
 }
@@ -433,13 +440,24 @@ function updatePlayer(p, dt) {
   p.landT = Math.max(0, p.landT - dt);
   if (p.flipT >= 0) p.flipT += dt;
 
+  // power-up-timers
+  p.spreadT = Math.max(0, p.spreadT - dt);
+  p.shieldT = Math.max(0, p.shieldT - dt);
+
   // skjuta
   p.fireT -= dt; p.flashT -= dt;
   if (inFire() && p.fireT <= 0 && !p.crouch) {
-    p.fireT = 0.13; p.flashT = 0.06;
+    p.fireT = p.spreadT > 0 ? 0.11 : 0.13;
+    p.flashT = 0.06;
     const my = p.y - (p.grounded && inDown() ? 20 : 30);
     const mx = p.x + p.facing * 26;
-    game.bullets.push({ x: mx, y: my, vx: p.facing * 720, vy: (Math.random() - 0.5) * 26, life: 0.9 });
+    if (p.spreadT > 0) {
+      for (const vy of [-130, 0, 130]) {
+        game.bullets.push({ x: mx, y: my, vx: p.facing * 720, vy, life: 0.9 });
+      }
+    } else {
+      game.bullets.push({ x: mx, y: my, vx: p.facing * 720, vy: (Math.random() - 0.5) * 26, life: 0.9 });
+    }
     p.vx -= p.facing * 26; // rekyl
     SFX.shoot();
     spawnFlash(mx + p.facing * 4, my, p.facing);
@@ -468,6 +486,7 @@ function spikeNear(p) {
 }
 function hurtPlayer(p, dmg, kbx, silentPos) {
   if (p.inv > 0 || game.state !== 'play') return;
+  if (p.shieldT > 0) { spawnSparks(p.x, p.y - 26, 6, '#6ee7ff'); return; }
   p.hp -= dmg; p.inv = 1.2;
   p.vy = -260; p.vx = kbx || -p.facing * 140;
   game.shake = Math.max(game.shake, 5);
@@ -615,8 +634,11 @@ function updatePickups(dt, p) {
     if (Math.abs(u.x - p.x) < 20 && Math.abs(u.y - (p.y - 22)) < 26) {
       u.got = true;
       if (u.type === 'med') { p.hp = Math.min(p.maxHp, p.hp + 1); SFX.heal(); }
+      else if (u.type === 'spread') { p.spreadT = 12; game.score += 100; SFX.power(); }
+      else if (u.type === 'shield') { p.shieldT = 8; game.score += 100; SFX.power(); }
       else { game.score += 50; SFX.pickup(); }
-      spawnSparks(u.x, u.y, 8, u.type === 'med' ? '#7dff9b' : '#ffe066');
+      const cols = { med: '#7dff9b', spread: '#ffa94e', shield: '#6ee7ff', star: '#ffe066' };
+      spawnSparks(u.x, u.y, 10, cols[u.type]);
     }
   }
   game.pickups = game.pickups.filter(u => !u.got);
@@ -702,6 +724,25 @@ function render() {
     if (u.type === 'med') {
       ctx.fillStyle = '#f2f2f2'; ctx.fillRect(u.x - 8, u.y - 8 + bob, 16, 14);
       ctx.fillStyle = '#e33'; ctx.fillRect(u.x - 2, u.y - 6 + bob, 4, 10); ctx.fillRect(u.x - 5, u.y - 3 + bob, 10, 4);
+    } else if (u.type === 'spread') {
+      // triple shot: gul kapsel med tre solfjäderskott
+      ctx.fillStyle = 'rgba(255,169,78,0.25)';
+      ctx.beginPath(); ctx.arc(u.x, u.y + bob, 13, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2c2f3a'; ctx.fillRect(u.x - 9, u.y - 7 + bob, 18, 14);
+      ctx.fillStyle = '#ffa94e';
+      ctx.fillRect(u.x - 6, u.y - 5 + bob, 8, 2);
+      ctx.fillRect(u.x - 6, u.y - 1 + bob, 10, 2);
+      ctx.fillRect(u.x - 6, u.y + 3 + bob, 8, 2);
+      ctx.fillStyle = '#ffe9a0';
+      ctx.fillRect(u.x + 3, u.y - 6 + bob, 3, 3); ctx.fillRect(u.x + 5, u.y - 1 + bob, 3, 3); ctx.fillRect(u.x + 3, u.y + 3 + bob, 3, 3);
+    } else if (u.type === 'shield') {
+      const pulse = 1 + Math.sin(u.t * 4) * 0.12;
+      ctx.strokeStyle = '#6ee7ff'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(u.x, u.y + bob, 10 * pulse, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(110,231,255,0.25)';
+      ctx.beginPath(); ctx.arc(u.x, u.y + bob, 10 * pulse, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#e8fbff';
+      ctx.fillRect(u.x - 1.5, u.y - 5 + bob, 3, 10); ctx.fillRect(u.x - 5, u.y - 1.5 + bob, 10, 3);
     } else {
       ctx.save(); ctx.translate(u.x, u.y + bob); ctx.rotate(u.t);
       ctx.fillStyle = '#ffe066';
@@ -729,6 +770,19 @@ function render() {
   if (game.state !== 'dead' || Math.floor(game.time * 8) % 2 === 0) {
     const blink = p.inv > 0 && Math.floor(game.time * 12) % 2 === 0;
     if (!blink && sheet.complete) drawFrame(sheet, playerFrame(p), p.x, p.y, p.facing < 0);
+  }
+  // sköld-aura
+  if (p.shieldT > 0) {
+    const fade = Math.min(1, p.shieldT / 1.5); // blinkar ut sista 1.5s
+    const on = p.shieldT > 1.5 || Math.floor(game.time * 8) % 2 === 0;
+    if (on) {
+      const rr = 30 + Math.sin(game.time * 6) * 2;
+      ctx.strokeStyle = `rgba(110,231,255,${0.8 * fade})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y - 25, rr, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = `rgba(110,231,255,${0.12 * fade})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y - 25, rr, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   // skott
@@ -843,6 +897,22 @@ function drawHUD(p) {
   ctx.fillText('SCORE ' + String(game.score).padStart(5, '0'), W - 12, 24);
   ctx.textAlign = 'left';
   ctx.fillText('✕ ' + game.kills, 14, 44);
+  // aktiva power-ups
+  let py = 62;
+  ctx.font = 'bold 10px monospace';
+  if (p.spreadT > 0) {
+    ctx.fillStyle = '#ffa94e';
+    ctx.fillText('TRIPLE SHOT', 14, py);
+    ctx.fillStyle = 'rgba(255,169,78,0.3)'; ctx.fillRect(14, py + 3, 70, 4);
+    ctx.fillStyle = '#ffa94e'; ctx.fillRect(14, py + 3, 70 * (p.spreadT / 12), 4);
+    py += 20;
+  }
+  if (p.shieldT > 0) {
+    ctx.fillStyle = '#6ee7ff';
+    ctx.fillText('SHIELD', 14, py);
+    ctx.fillStyle = 'rgba(110,231,255,0.3)'; ctx.fillRect(14, py + 3, 70, 4);
+    ctx.fillStyle = '#6ee7ff'; ctx.fillRect(14, py + 3, 70 * (p.shieldT / 8), 4);
+  }
   // progress
   const prog = Math.min(1, game.player.x / game.finishX);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';

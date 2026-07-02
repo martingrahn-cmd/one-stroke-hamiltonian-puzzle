@@ -27,6 +27,8 @@ Touchkontroller visas automatiskt på mobil.
 - **Fiender**: patrullerande soldater (samma spritesheet, röd-tintad i runtime)
   som siktar och skjuter i bursts, samt svävande vaktdrönare.
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
+- **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
+  i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.
 - **Känsla**: coyote time, hoppbuffert, variabel hopphöjd, rekyl, skärmskak,
   partiklar (mynningsflamma, tomhylsor, gnistor, explosioner), parallax-solnedgång
   och WebAudio-syntade ljudeffekter.
