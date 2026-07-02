@@ -39,6 +39,11 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
   death-sekvens som spelas när de stupar), tunga **Heavies med bazooka**
   (`assets/heavy.png` — 6 HP, siktar med windup och avfyrar raketer med
   rökspår och splash-skada), samt svävande vaktdrönare.
+- **Boss: attackhelikopter** (`assets/heli.png`, 176×144-frames) — triggas
+  vid banans slut och låser extraktionszonen tills den skjutits ner. Fas 1:
+  gatling-spray och siktade raketer. Fas 2 (under 50 % HP, ryker): snabbare,
+  strafe-bombningar över arenan och trupplandsättning på rep. Störtar med
+  explosioner när den besegras (+1000 poäng).
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
 - **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
   i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.

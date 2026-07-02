@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v5'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v6'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames (index i 8-kolumners grid) --------------------------
@@ -32,6 +32,13 @@ const GR = {
   WALK0: 8, WALKN: 6,  // gångcykel 8-13
   DEATH0: 16, DEATHN: 6, // death-sekvens 16-21
 };
+
+// Boss: attackhelikopter (assets/heli.png, 176x144-frames, 4 kolumner,
+// vänstervänd). Rad 0: hover 0-3. Rad 1: kanon 4 (sikta), 5 (ELD), 6 (plan),
+// 7 (trupplandsättning). Rad 2: 8 (plan), 9-10 (skadad/rök), 11 (störtar).
+const BFW = 176, BFH = 144, BCOLS = 4;
+const BOSS_F = { HOVER: [0, 1, 2, 3], AIM: 6, FIRE: [5, 4], DROP: 7, DMG: [10, 9], CRASH: 11 };
+const BOSS_TRIGGER_X = 178 * TILE;
 
 // Fiende: Heavy med bazooka (assets/heavy.png, 64x64-frames, 6 kolumner,
 // vänstervänd). Rad 0: idle 0-5. Rad 1: sikta 6-8, ELD 9-10, ladda om 11.
@@ -110,6 +117,8 @@ const SFX = {
   shoot()   { noiseBurst(0.06, 0.10, true); blip('square', 700, 180, 0.07, 0.06); },
   eshoot()  { noiseBurst(0.05, 0.06, true); blip('square', 400, 120, 0.08, 0.04); },
   rocket()  { noiseBurst(0.3, 0.12); blip('sawtooth', 300, 60, 0.35, 0.10); },
+  alarm()   { [0, 220, 440].forEach(d => setTimeout(() => blip('square', 880, 320, 0.2, 0.11), d)); },
+  bossdie() { [0, 200, 420, 700].forEach((d, i) => setTimeout(() => { noiseBurst(0.35, 0.18); blip('sawtooth', 200 - i * 30, 40, 0.4, 0.12); }, d)); },
   jump()    { blip('square', 260, 560, 0.12, 0.08); },
   flip()    { blip('square', 420, 900, 0.14, 0.08); },
   land()    { blip('sine', 140, 70, 0.06, 0.10); },
@@ -189,6 +198,8 @@ const gruntSheet = new Image();
 gruntSheet.src = 'assets/grunt.png';
 const heavySheet = new Image();
 heavySheet.src = 'assets/heavy.png';
+const heliSheet = new Image();
+heliSheet.src = 'assets/heli.png';
 sheet.onload = () => {
   buildTerrain();
   buildParallax();
@@ -353,6 +364,8 @@ function startGame() {
   game.heavies = [];
   game.drones = [];
   game.msg = null; game.msgT = 0;
+  game.boss = null;
+  game.bossDead = false;
 
   let px = 2 * TILE, py = 9 * TILE;
   game.finishX = LEVEL_W - 3 * TILE;
@@ -526,8 +539,15 @@ function updatePlayer(p, dt) {
     if (game.state === 'play') { p.x = game.safe.x; p.y = game.safe.y; p.vx = p.vy = 0; }
   }
 
-  // mål
-  if (Math.abs(p.x - game.finishX) < 26 && Math.abs(p.y - game.finishY) < 60) {
+  // boss-trigger
+  if (!game.boss && !game.bossDead && p.x > BOSS_TRIGGER_X) {
+    game.boss = makeBoss();
+    SFX.alarm();
+    game.shake = Math.max(game.shake, 4);
+  }
+
+  // mål (låst tills bossen är nedskjuten)
+  if (game.bossDead && Math.abs(p.x - game.finishX) < 26 && Math.abs(p.y - game.finishY) < 60) {
     game.state = 'win';
     SFX.win();
   }
@@ -643,9 +663,128 @@ function updateHeavy(h, dt, p) {
   h.animT += dt;
 }
 
+// ---- Boss: attackhelikopter -------------------------------------------------
+function makeBoss() {
+  return {
+    x: BOSS_TRIGGER_X + W + 180, y: 150,
+    hp: 35, maxHp: 35,
+    state: 'enter', t: 0, animT: 0,
+    cool: 2.2, flashT: 0, hitT: 0, dieT: -1,
+    facing: -1, fireT: 0, strafeDir: -1, boomT: 0, drops: 0,
+  };
+}
+const bossPhase2 = b => b.hp <= b.maxHp * 0.5;
+
+function updateBoss(b, dt, p) {
+  b.animT += dt; b.t += dt;
+  b.hitT = Math.max(0, b.hitT - dt);
+  b.flashT = Math.max(0, b.flashT - dt);
+
+  if (b.dieT >= 0) { // störtar
+    b.dieT += dt;
+    b.y += (40 + b.dieT * 90) * dt;
+    b.x += b.facing * 20 * dt;
+    b.boomT -= dt;
+    if (b.boomT <= 0) {
+      b.boomT = 0.22;
+      killBoom(b.x + (Math.random() - 0.5) * 100, b.y + (Math.random() - 0.5) * 50);
+    }
+    if (b.y > 9 * TILE) { // marken
+      for (let i = 0; i < 4; i++) killBoom(b.x + (Math.random() - 0.5) * 130, b.y + (Math.random() - 0.5) * 40);
+      game.shake = 14;
+      game.score += 1000; game.kills++;
+      game.bossDead = true;
+      game.boss = null;
+      SFX.bossdie();
+    }
+    return;
+  }
+
+  b.facing = p.x > b.x ? 1 : -1;
+  const p2 = bossPhase2(b);
+  const speed = p2 ? 130 : 90;
+
+  if (b.state === 'enter') {
+    b.x += (6100 - b.x) * Math.min(1, 1.4 * dt);
+    if (Math.abs(b.x - 6100) < 40) { b.state = 'hover'; b.cool = 1.6; }
+  } else if (b.state === 'hover') {
+    const tx = Math.max(5820, Math.min(6180, p.x + (p.x < b.x ? 170 : -170)));
+    const ty = Math.max(130, Math.min(235, p.y - 110));
+    b.x += Math.sign(tx - b.x) * Math.min(speed * dt, Math.abs(tx - b.x));
+    b.y += Math.sign(ty - b.y) * Math.min(70 * dt, Math.abs(ty - b.y));
+    b.y += Math.sin(b.t * 2.1) * 8 * dt;
+    b.cool -= dt;
+    if (b.cool <= 0) {
+      const moves = p2 ? ['gatling', 'rocket', 'strafe', 'drop'] : ['gatling', 'rocket'];
+      let mv = moves[Math.floor(Math.random() * moves.length)];
+      const nearby = game.enemies.filter(e => e.hp > 0 && e.x > BOSS_TRIGGER_X - 200).length;
+      if (mv === 'drop' && (b.drops >= 2 || nearby >= 2)) mv = 'strafe';
+      b.state = mv; b.t = 0; b.fireT = 0;
+    }
+  } else if (b.state === 'gatling') {
+    if (b.t > 0.5) { // telegraferad windup, sen spray
+      b.fireT -= dt;
+      if (b.fireT <= 0) {
+        b.fireT = 0.13;
+        b.flashT = 0.08;
+        const dx = p.x - b.x, dy = (p.y - 24) - b.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const s = 330 / d, spread = 40;
+        game.ebullets.push({ x: b.x + b.facing * 50, y: b.y + 14,
+          vx: dx * s + (Math.random() - 0.5) * spread, vy: dy * s + (Math.random() - 0.5) * spread, life: 2.2 });
+        SFX.eshoot();
+      }
+    }
+    if (b.t > (p2 ? 2.1 : 1.7)) { b.state = 'hover'; b.cool = p2 ? 1.4 : 2.2; }
+  } else if (b.state === 'rocket') {
+    if ((b.t > 0.5 && b.fireT === 0) || (b.t > 0.9 && b.fireT === 1)) {
+      b.fireT++;
+      b.flashT = 0.15;
+      const dx = p.x - b.x, dy = (p.y - 20) - b.y;
+      const d = Math.hypot(dx, dy) || 1;
+      game.rockets.push({ x: b.x + b.facing * 40, y: b.y + 18, vx: dx / d * 265, vy: dy / d * 265, life: 3 });
+      SFX.rocket();
+    }
+    if (b.t > 1.3) { b.state = 'hover'; b.cool = p2 ? 1.5 : 2.4; }
+  } else if (b.state === 'strafe') {
+    if (b.t < 0.4) {
+      b.strafeDir = p.x > b.x ? 1 : -1; // sikta in sig
+    } else {
+      b.x += b.strafeDir * 430 * dt;
+      b.y += (140 - b.y) * 2 * dt;
+      b.fireT -= dt;
+      if (b.fireT <= 0) {
+        b.fireT = 0.32;
+        game.rockets.push({ x: b.x, y: b.y + 40, vx: b.strafeDir * 90, vy: 40, grav: 520, life: 3 });
+      }
+      if (b.x < 5790 || b.x > 6210) { b.state = 'hover'; b.cool = 1.6; }
+    }
+  } else if (b.state === 'drop') {
+    if (b.t > 0.7 && !b.dropped) {
+      b.dropped = true; b.drops++;
+      const e = makeEnemy(b.x, b.y + 50);
+      e.vy = 60;
+      game.enemies.push(e);
+    }
+    if (b.t > 1.5) { b.state = 'hover'; b.dropped = false; b.cool = 1.8; }
+  }
+}
+
+function bossFrame(b) {
+  if (b.dieT >= 0) return b.dieT < 0.4 ? BOSS_F.DMG[0] : BOSS_F.CRASH;
+  if (b.state === 'drop') return BOSS_F.DROP;
+  if (b.flashT > 0) return BOSS_F.FIRE[Math.floor(b.animT * 20) % 2];
+  if (b.state === 'gatling' || b.state === 'rocket') return BOSS_F.AIM;
+  if (bossPhase2(b)) return BOSS_F.DMG[Math.floor(b.animT * 8) % 2];
+  return BOSS_F.HOVER[Math.floor(b.animT * 10) % 4];
+}
+
 function updateRockets(dt, p) {
   for (const r of game.rockets) {
-    r.x += r.vx * dt; r.life -= dt;
+    r.x += r.vx * dt;
+    if (r.vy) r.y += r.vy * dt;
+    if (r.grav) r.vy = (r.vy || 0) + r.grav * dt;
+    r.life -= dt;
     // rökspår
     if (Math.random() < 0.7) game.particles.push({
       x: r.x - Math.sign(r.vx) * 10, y: r.y + (Math.random() - 0.5) * 4,
@@ -710,6 +849,12 @@ function updateBullets(dt, p) {
           spawnSparks(h.x, h.y - 30, 12, '#a3232b');
         }
       }
+    }
+    const bo = game.boss;
+    if (bo && bo.dieT < 0 && b.life > 0 && Math.abs(b.x - bo.x) < 68 && Math.abs(b.y - bo.y) < 46) {
+      b.life = 0; bo.hp--; bo.hitT = 0.08;
+      spawnSparks(b.x, b.y, 5, '#ffd25e');
+      if (bo.hp <= 0) { bo.dieT = 0; game.shake = 8; }
     }
     for (const d of game.drones) {
       if (!d.dead && Math.hypot(b.x - d.x, b.y - d.y) < 14 && b.life > 0) {
@@ -935,6 +1080,18 @@ function render() {
     if (d.dead) continue;
     drawDrone(d);
   }
+  // boss
+  if (game.boss && heliSheet.complete && heliSheet.naturalWidth) {
+    const b = game.boss;
+    if (b.hitT > 0) ctx.globalAlpha = 0.65;
+    // helin är ritad vänstervänd — flippa åt höger; center-ankrad via +72
+    drawFrame(heliSheet, bossFrame(b), b.x, b.y + 72, b.facing > 0, BFW, BFH, BCOLS);
+    ctx.globalAlpha = 1;
+    if (bossPhase2(b) && b.dieT < 0 && Math.random() < 0.3) {
+      game.particles.push({ x: b.x + (Math.random() - 0.5) * 60, y: b.y - 20, vx: (Math.random() - 0.5) * 20,
+        vy: -30 - Math.random() * 30, life: 0.6, col: 'rgba(60,60,64,0.8)', sz: 4, grav: -40 });
+    }
+  }
 
   // spelare
   if (game.state !== 'dead' || Math.floor(game.time * 8) % 2 === 0) {
@@ -1036,8 +1193,16 @@ function drawExtraction(x, y) {
   const blink = Math.sin(game.time * 6) > 0;
   ctx.fillStyle = '#555f70';
   ctx.fillRect(x - 34, y - 26, 4, 22); ctx.fillRect(x + 30, y - 26, 4, 22);
-  ctx.fillStyle = blink ? '#5eff7a' : '#1d7a30';
+  ctx.fillStyle = blink ? (game.bossDead ? '#5eff7a' : '#ff4757') : (game.bossDead ? '#1d7a30' : '#7a1d1d');
   ctx.fillRect(x - 35, y - 31, 6, 6); ctx.fillRect(x + 29, y - 31, 6, 6);
+  if (!game.bossDead) {
+    // låst tills luftrummet är säkrat — räddningshelin vågar inte landa
+    ctx.fillStyle = blink ? 'rgba(255,71,87,0.9)' : 'rgba(255,71,87,0.5)';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('LÅST — SÄKRA LUFTRUMMET', x, y - 40);
+    return;
+  }
   // helikopter som väntar
   const hy = y - 96 + Math.sin(game.time * 1.7) * 4;
   ctx.save();
@@ -1092,6 +1257,21 @@ function drawHUD(p) {
     ctx.fillText('SHIELD', 14, py);
     ctx.fillStyle = 'rgba(110,231,255,0.3)'; ctx.fillRect(14, py + 3, 70, 4);
     ctx.fillStyle = '#6ee7ff'; ctx.fillRect(14, py + 3, 70 * (p.shieldT / 8), 4);
+  }
+  // boss-bar
+  if (game.boss) {
+    const b = game.boss;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(W / 2 - 110, 26, 220, 10);
+    ctx.fillStyle = bossPhase2(b) ? '#ff8c42' : '#ff4757';
+    ctx.fillRect(W / 2 - 108, 28, 216 * Math.max(0, b.hp / b.maxHp), 6);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 9px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('ATTACKHELIKOPTER', W / 2, 45);
+    if (b.state === 'enter' && Math.sin(game.time * 10) > 0) {
+      bigText('⚠ FIENDEHELIKOPTER INKOMMANDE ⚠', 80, 16, '#ff4757', '#800');
+    }
   }
   // progress
   const prog = Math.min(1, game.player.x / game.finishX);
@@ -1187,6 +1367,7 @@ function loop(now) {
     updatePlayer(game.player, dt);
     for (const e of game.enemies) updateEnemy(e, dt, game.player);
     for (const h of game.heavies) updateHeavy(h, dt, game.player);
+    if (game.boss) updateBoss(game.boss, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
     updateRockets(dt, game.player);
