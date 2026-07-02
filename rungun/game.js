@@ -101,7 +101,7 @@ const SFX = {
 
 // ---- Input ----------------------------------------------------------------
 const keys = {};
-let touchUI = false;
+let touchUI = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 let pendingJump = false;
 const vbtn = { left: false, right: false, jump: false, fire: false };
 addEventListener('keydown', e => {
@@ -293,9 +293,25 @@ function buildParallax() {
   }
 }
 
+// ---- Webapp/fullskärm ------------------------------------------------------
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isStandalone = () =>
+  matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches
+  || navigator.standalone === true;
+function goFullscreen() {
+  // Android/desktop: riktig fullskärm. iOS Safari saknar Fullscreen API för
+  // canvas — där är "Lägg till på hemskärmen" vägen till helskärm.
+  if (isStandalone() || IS_IOS) return;
+  const el = document.documentElement;
+  if (el.requestFullscreen) el.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+  if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
+}
+
 // ---- Speltillstånd ----------------------------------------------------------
 const game = {};
 function startGame() {
+  if (touchUI) goFullscreen();
   game.state = 'play';
   game.time = 0;
   game.score = 0;
@@ -952,9 +968,19 @@ function drawTitle() {
     drawFrame(sheet, fi, 0, 24, false);
     ctx.restore();
   }
-  bigText('A/D eller ←→ · W/SPACE hopp (dubbelhopp = volt!) · J/X/musknapp skjut · S duck', 285, 11, '#dfe6ff');
+  if (touchUI) {
+    bigText('◀ ▶ gå · ⤒ hopp (tryck igen i luften = volt!) · ✹ skjut', 285, 11, '#dfe6ff');
+  } else {
+    bigText('A/D eller ←→ · W/SPACE hopp (dubbelhopp = volt!) · J/X/musknapp skjut · S duck', 285, 11, '#dfe6ff');
+  }
   const b = Math.sin(game.time * 5) > -0.2;
   if (b) bigText(touchUI ? 'TRYCK FÖR ATT STARTA' : 'TRYCK ENTER FÖR ATT STARTA', 320, 15, '#5eff7a');
+  if (IS_IOS && !isStandalone()) {
+    bigText('Tips: Dela → "Lägg till på hemskärmen" = helskärm utan Safari-UI', 345, 10, '#9aa7c7');
+  }
+  if (innerHeight > innerWidth) {
+    bigText('↻ VRID MOBILEN TILL LIGGANDE LÄGE', 60, 14, '#ffd25e', '#ff8c42');
+  }
 }
 function drawDead() {
   panel(0.55);
