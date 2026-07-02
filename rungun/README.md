@@ -17,7 +17,17 @@ webbserver (t.ex. `python3 -m http.server`) och spela.
 | Ducka               | `S` eller `↓`                    |
 | Starta om           | `R`                              |
 
-Touchkontroller visas automatiskt på mobil.
+Touchkontroller visas automatiskt på mobil: `◀ ▶` för att gå, `⤒` hopp
+(tryck igen i luften för dubbelhopp/volt), `✹` skjut.
+
+## Webapp (PWA)
+
+Spelet är installerbart som webapp med manifest + service worker (offline-stöd):
+
+- **iOS/Safari**: Dela → **"Lägg till på hemskärmen"** → starta från ikonen.
+  Då körs spelet i helskärm utan Safaris adressfält/verktygsrader.
+- **Android/Chrome**: "Installera app" i menyn, eller spela direkt — spelet
+  begär fullskärm + landskapslås när du startar via touch.
 
 ## Innehåll
 
