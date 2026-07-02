@@ -1,6 +1,6 @@
 'use strict';
 // Enkel cache-first service worker så spelet funkar offline som webapp.
-const CACHE = 'commando-strike-v4';
+const CACHE = 'commando-strike-v5';
 const CORE = [
   './',
   './index.html',
