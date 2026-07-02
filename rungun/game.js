@@ -123,14 +123,19 @@ canvas.addEventListener('mousedown', () => { audio(); if (game.state !== 'play')
 addEventListener('mouseup', () => { mouseFire = false; });
 
 function canvasPos(t) {
+  // object-fit: contain — spelet ritas letterboxat i elementets box,
+  // så mappa via den uniforma skalan + centrerings-offset
   const r = canvas.getBoundingClientRect();
-  return { x: (t.clientX - r.left) / r.width * W, y: (t.clientY - r.top) / r.height * H };
+  const s = Math.min(r.width / W, r.height / H);
+  const ox = r.left + (r.width - s * W) / 2;
+  const oy = r.top + (r.height - s * H) / 2;
+  return { x: (t.clientX - ox) / s, y: (t.clientY - oy) / s };
 }
 const TB = [
-  { id: 'left',  x: 52,      y: H - 50, r: 34, label: '◀' },
-  { id: 'right', x: 132,     y: H - 50, r: 34, label: '▶' },
-  { id: 'jump',  x: W - 130, y: H - 50, r: 34, label: '⤒' },
-  { id: 'fire',  x: W - 48,  y: H - 50, r: 34, label: '✹' },
+  { id: 'left',  x: 56,      y: H - 58, r: 36, label: '◀' },
+  { id: 'right', x: 142,     y: H - 58, r: 36, label: '▶' },
+  { id: 'jump',  x: W - 140, y: H - 58, r: 36, label: '⤒' },
+  { id: 'fire',  x: W - 54,  y: H - 58, r: 36, label: '✹' },
 ];
 function updateTouches(e) {
   e.preventDefault();
@@ -141,7 +146,7 @@ function updateTouches(e) {
   for (const t of e.touches) {
     const p = canvasPos(t);
     for (const b of TB) {
-      if (Math.hypot(p.x - b.x, p.y - b.y) < b.r + 14) vbtn[b.id] = true;
+      if (Math.hypot(p.x - b.x, p.y - b.y) < b.r + 22) vbtn[b.id] = true;
     }
   }
   if (vbtn.jump && !wasJump) pendingJump = true;
@@ -150,6 +155,9 @@ function updateTouches(e) {
 canvas.addEventListener('touchstart', updateTouches, { passive: false });
 canvas.addEventListener('touchmove', updateTouches, { passive: false });
 canvas.addEventListener('touchend', updateTouches, { passive: false });
+// iOS avbryter touches med touchcancel när kantgester tar över —
+// utan denna fastnar knapparna i nedtryckt läge
+canvas.addEventListener('touchcancel', updateTouches, { passive: false });
 
 // ---- Tillgångar -----------------------------------------------------------
 const sheet = new Image();
