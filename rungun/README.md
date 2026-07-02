@@ -36,7 +36,9 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
   helikopter i slutet.
 - **Fiender**: patrullerande **Renegade Grunts** (egen spritesheet:
   `assets/grunt.png` — idle, gång, skott med mynningsflamma och en dramatisk
-  death-sekvens som spelas när de stupar), samt svävande vaktdrönare.
+  death-sekvens som spelas när de stupar), tunga **Heavies med bazooka**
+  (`assets/heavy.png` — 6 HP, siktar med windup och avfyrar raketer med
+  rökspår och splash-skada), samt svävande vaktdrönare.
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
 - **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
   i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.
@@ -66,4 +68,7 @@ delar ihopvuxna blobbar och paketerar om allt till en jämn 8×3-sheet
 - `assets/commando.png` — spelarens spritesheet (ompaketerad, med alfa)
 - `assets/grunt.png` — fiendens spritesheet (Renegade Grunt: idle 0–1,
   skott 2–3, sikte 4–5, gång 8–13, death 16–21; ritad vänstervänd)
+- `assets/heavy.png` — bazooka-fienden (64×64-frames, 6 kolumner: idle 0–5,
+  sikte 6–8, eld 9–10, gång 12–14, död 15–17; vänstervänd — eldframesen
+  var högervända i källbilden och är flippade vid extraktion)
 - `tools/extract_sprites.py` — sprite-extraktion från originalbilderna

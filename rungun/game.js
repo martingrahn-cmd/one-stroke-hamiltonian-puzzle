@@ -32,8 +32,19 @@ const GR = {
   DEATH0: 16, DEATHN: 6, // death-sekvens 16-21
 };
 
+// Fiende: Heavy med bazooka (assets/heavy.png, 64x64-frames, 6 kolumner,
+// vänstervänd). Rad 0: idle 0-5. Rad 1: sikta 6-8, ELD 9-10, ladda om 11.
+// Rad 2: gång 12-14, liggande död 15-16, träffreaktion 17.
+const HFW = 64, HFH = 64, HCOLS = 6;
+const HV = {
+  IDLE0: 0, IDLEN: 6,
+  AIM: [6, 7, 8], FIRE: [9, 10], HOLD: 11,
+  WALK: [12, 13, 14],
+  DEATH: [17, 15, 16],
+};
+
 // ---- Nivå ----------------------------------------------------------------
-// #=mark  C=låda  B=metall  ==plattform(one-way)  S=spikar  E=fiende  D=drönare
+// #=mark  C=låda  B=metall  ==plattform(one-way)  S=spikar  E=fiende  R=heavy(bazooka)  D=drönare
 // M=medkit  *=stjärna  P=spelarstart  F=extraktion
 const MAP_SRC = [
 '                                                                                                                                                                                                        ',
@@ -44,7 +55,7 @@ const MAP_SRC = [
 '                            ====                        =======                =======            E                        ======      *  *                                                             ',
 '                                          E                        D                            ======        C          ==========   =====          E          M                    E  E               ',
 '                 *  *                  ======                                        C C                 *   CC                                    =======     ====                 ========            ',
-'          M                                             E              E            CCCC       C        CCC CCC              E                                                E                    F    ',
+'          M                                             E              E            CCCC       C    R   CCC CCC              E                                                E               R    F    ',
 '   P         C        E        C                     ########      ##########      ######     ===      #########         ========       ==     =======     SS    SS                   C C               ',
 '#######################################   ###   #####        ######          ######      #####   ######         #########        ##### ### ####       ####################   #########################  ',
 '####################################### S ### S #####        ######          ######      #####   ######         #########        ##### ### ####       ####################SSS#########################  ',
@@ -97,6 +108,7 @@ function noiseBurst(dur, vol, hp) {
 const SFX = {
   shoot()   { noiseBurst(0.06, 0.10, true); blip('square', 700, 180, 0.07, 0.06); },
   eshoot()  { noiseBurst(0.05, 0.06, true); blip('square', 400, 120, 0.08, 0.04); },
+  rocket()  { noiseBurst(0.3, 0.12); blip('sawtooth', 300, 60, 0.35, 0.10); },
   jump()    { blip('square', 260, 560, 0.12, 0.08); },
   flip()    { blip('square', 420, 900, 0.14, 0.08); },
   land()    { blip('sine', 140, 70, 0.06, 0.10); },
@@ -174,18 +186,20 @@ const sheet = new Image();
 sheet.src = 'assets/commando.png';
 const gruntSheet = new Image();
 gruntSheet.src = 'assets/grunt.png';
+const heavySheet = new Image();
+heavySheet.src = 'assets/heavy.png';
 sheet.onload = () => {
   buildTerrain();
   buildParallax();
 };
 
-function drawFrame(img, idx, x, y, flip) {
+function drawFrame(img, idx, x, y, flip, fw = FW, fh = FH, cols = COLS) {
   // x,y = fötternas mittpunkt i världen (ritas i skärmkoordinater av anroparen)
-  const sx = (idx % COLS) * FW, sy = Math.floor(idx / COLS) * FH;
+  const sx = (idx % cols) * fw, sy = Math.floor(idx / cols) * fh;
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   if (flip) ctx.scale(-1, 1);
-  ctx.drawImage(img, sx, sy, FW, FH, -FW / 2, -FH + 1, FW, FH);
+  ctx.drawImage(img, sx, sy, fw, fh, -fw / 2, -fh + 1, fw, fh);
   ctx.restore();
 }
 
@@ -331,9 +345,11 @@ function startGame() {
   game.camX = 0; game.camY = 0;
   game.bullets = [];
   game.ebullets = [];
+  game.rockets = [];
   game.particles = [];
   game.pickups = [];
   game.enemies = [];
+  game.heavies = [];
   game.drones = [];
   game.msg = null; game.msgT = 0;
 
@@ -345,6 +361,7 @@ function startGame() {
       const cx = tx * TILE + TILE / 2, cy = ty * TILE + TILE;
       if (c === 'P') { px = cx; py = cy; }
       else if (c === 'E') game.enemies.push(makeEnemy(cx, cy));
+      else if (c === 'R') game.heavies.push(makeHeavy(cx, cy));
       else if (c === 'D') game.drones.push(makeDrone(cx, cy - TILE / 2));
       else if (c === 'M') game.pickups.push({ type: 'med', x: cx, y: cy - 10, t: Math.random() * 6 });
       else if (c === '*') game.pickups.push({ type: 'star', x: cx, y: cy - 10, t: Math.random() * 6 });
@@ -379,6 +396,15 @@ function makeEnemy(x, y) {
     hp: 3, hitT: 0, state: 'patrol', dieT: -1,
     aimT: 0, burst: 0, burstT: 0, cool: 1 + Math.random(),
     animT: Math.random() * 10, home: x,
+  };
+}
+function makeHeavy(x, y) {
+  return {
+    x, y, vx: 0, vy: 0, w: 26, h: 52,
+    facing: -1, grounded: false,
+    hp: 6, hitT: 0, dieT: -1,
+    windup: -1, flashT: 0, cool: 2 + Math.random(),
+    animT: Math.random() * 10,
   };
 }
 function makeDrone(x, y) {
@@ -570,6 +596,74 @@ function updateEnemy(e, dt, p) {
   moveBody(e, dt, true);
   e.animT += dt;
 }
+function updateHeavy(h, dt, p) {
+  if (h.hp <= 0) {
+    if (h.dieT >= 0) h.dieT += dt;
+    h.vx = 0;
+    h.vy += GRAV * dt;
+    moveBody(h, dt, true);
+    return;
+  }
+  h.hitT = Math.max(0, h.hitT - dt);
+  h.flashT = Math.max(0, h.flashT - dt);
+  const dx = p.x - h.x, dy = p.y - h.y;
+  const sees = Math.abs(dx) < 420 && Math.abs(dy) < 80 && game.state === 'play';
+
+  if (sees) {
+    h.facing = dx > 0 ? 1 : -1;
+    h.vx = 0;
+    if (h.windup >= 0) {
+      h.windup += dt;
+      if (h.windup >= 0.55) { // avfyra!
+        h.windup = -1;
+        h.flashT = 0.28;
+        h.cool = 2.6 + Math.random() * 0.9;
+        game.rockets.push({ x: h.x + h.facing * 36, y: h.y - 30, vx: h.facing * 250, life: 3.5 });
+        SFX.rocket();
+        game.shake = Math.max(game.shake, 2);
+        spawnFlash(h.x + h.facing * 40, h.y - 30, h.facing);
+      }
+    } else {
+      h.cool -= dt;
+      if (h.cool <= 0) h.windup = 0;
+    }
+  } else {
+    h.windup = -1;
+    // långsam hotfull patrull
+    const ahead = h.x + h.facing * (h.w / 2 + 6);
+    const groundAhead = solidAt(Math.floor(ahead / TILE), Math.floor((h.y + 4) / TILE))
+                     || platformAt(Math.floor(ahead / TILE), Math.floor((h.y + 4) / TILE));
+    const wallAhead = solidAt(Math.floor(ahead / TILE), Math.floor((h.y - 24) / TILE));
+    if ((!groundAhead || wallAhead) && h.grounded) h.facing *= -1;
+    h.vx = h.facing * 24;
+  }
+  h.vy += GRAV * dt;
+  moveBody(h, dt, true);
+  h.animT += dt;
+}
+
+function updateRockets(dt, p) {
+  for (const r of game.rockets) {
+    r.x += r.vx * dt; r.life -= dt;
+    // rökspår
+    if (Math.random() < 0.7) game.particles.push({
+      x: r.x - Math.sign(r.vx) * 10, y: r.y + (Math.random() - 0.5) * 4,
+      vx: (Math.random() - 0.5) * 20, vy: -12 - Math.random() * 18,
+      life: 0.4 + Math.random() * 0.3, col: 'rgba(180,180,190,0.7)', sz: 2.5, grav: -20 });
+    let boom = r.life <= 0 || solidAt(Math.floor((r.x + Math.sign(r.vx) * 8) / TILE), Math.floor(r.y / TILE));
+    if (!boom && game.state === 'play' && Math.abs(r.x - p.x) < 14 && r.y > p.y - p.h && r.y < p.y + 4) boom = true;
+    if (boom) {
+      r.life = 0;
+      killBoom(r.x, r.y);
+      // splash-skada med tryckvåg
+      if (game.state === 'play' && Math.hypot(p.x - r.x, (p.y - 24) - r.y) < 52) {
+        hurtPlayer(p, 1, Math.sign(p.x - r.x) * 200);
+      }
+    }
+  }
+  game.rockets = game.rockets.filter(r => r.life > 0);
+}
+
 function updateDrone(d, dt, p) {
   if (d.dead) return;
   d.t += dt;
@@ -601,6 +695,19 @@ function updateBullets(dt, p) {
         b.life = 0; e.hp--; e.hitT = 0.1;
         spawnSparks(b.x, b.y, 6, '#ff8866');
         if (e.hp <= 0) killEnemy(e);
+      }
+    }
+    for (const h of game.heavies) {
+      if (h.hp > 0 && Math.abs(b.x - h.x) < 17 && b.y > h.y - h.h && b.y < h.y + 4 && b.life > 0) {
+        b.life = 0; h.hp--; h.hitT = 0.1;
+        spawnSparks(b.x, b.y, 6, '#ff8866');
+        if (h.hp <= 0) {
+          game.kills++; game.score += 250;
+          h.dieT = 0;
+          SFX.edie();
+          game.shake = Math.max(game.shake, 4);
+          spawnSparks(h.x, h.y - 30, 12, '#a3232b');
+        }
       }
     }
     for (const d of game.drones) {
@@ -698,6 +805,14 @@ function playerFrame(p) {
   if (inFire()) return F.AIM;
   return Math.sin(p.animT * 2.4) > 0.65 ? F.RAISED : F.IDLE;
 }
+function heavyFrame(h) {
+  if (h.hp <= 0) return HV.DEATH[Math.min(HV.DEATH.length - 1, Math.floor(h.dieT * 7))];
+  if (h.flashT > 0) return HV.FIRE[Math.floor(h.animT * 20) % 2];
+  if (h.windup >= 0) return HV.AIM[Math.min(2, Math.floor(h.windup * 6))];
+  if (Math.abs(h.vx) > 5) return HV.WALK[Math.floor(h.animT * 6) % 3];
+  return HV.IDLE0 + Math.floor(h.animT * 7) % HV.IDLEN;
+}
+
 function enemyFrame(e) {
   if (e.hp <= 0) return GR.DEATH0 + Math.min(GR.DEATHN - 1, Math.floor(e.dieT * 10));
   if (e.state === 'aim') {
@@ -803,6 +918,17 @@ function render() {
       ctx.globalAlpha = 1;
     }
   }
+  // heavies
+  for (const h of game.heavies) {
+    if (h.hp <= 0 && (h.dieT < 0 || h.dieT > 2.6)) continue;
+    if (heavySheet.complete && heavySheet.naturalWidth) {
+      if (h.hitT > 0) ctx.globalAlpha = 0.6;
+      else if (h.hp <= 0 && h.dieT > 1.8) ctx.globalAlpha = Math.max(0, 1 - (h.dieT - 1.8) / 0.8);
+      // heavy är ritad vänstervänd — flippa åt höger
+      drawFrame(heavySheet, heavyFrame(h), h.x, h.y, h.facing > 0, HFW, HFH, HCOLS);
+      ctx.globalAlpha = 1;
+    }
+  }
   // drönare
   for (const d of game.drones) {
     if (d.dead) continue;
@@ -838,6 +964,16 @@ function render() {
   ctx.fillStyle = '#ff6b5e';
   for (const b of game.ebullets) {
     ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
+  }
+  // raketer
+  for (const r of game.rockets) {
+    const dir = Math.sign(r.vx);
+    ctx.fillStyle = '#4a4f5e';
+    ctx.fillRect(r.x - 7, r.y - 2.5, 14, 5);
+    ctx.fillStyle = '#c23b2e';
+    ctx.fillRect(r.x + dir * 5, r.y - 2.5, 3, 5); // nos
+    ctx.fillStyle = Math.random() < 0.5 ? '#ffd25e' : '#ff8c42';
+    ctx.beginPath(); ctx.arc(r.x - dir * 9, r.y, 3.5, 0, Math.PI * 2); ctx.fill(); // eldsvans
   }
 
   // partiklar
@@ -1045,8 +1181,10 @@ function loop(now) {
   if (game.state === 'play') {
     updatePlayer(game.player, dt);
     for (const e of game.enemies) updateEnemy(e, dt, game.player);
+    for (const h of game.heavies) updateHeavy(h, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
+    updateRockets(dt, game.player);
     updatePickups(dt, game.player);
   } else if (game.state === 'dead') {
     game.player.vy += GRAV * dt;
