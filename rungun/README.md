@@ -8,17 +8,19 @@ webbserver (t.ex. `python3 -m http.server`) och spela.
 
 ## Kontroller
 
-| Handling            | Tangent                          |
-|---------------------|----------------------------------|
-| Gå vänster/höger    | `A`/`D` eller `←`/`→`            |
-| Hoppa               | `W`, `Space` eller `↑`           |
-| Dubbelhopp (volt!)  | Hoppa igen i luften              |
-| Skjut               | `J`, `X` eller vänster musknapp  |
-| Ducka               | `S` eller `↓`                    |
-| Starta om           | `R`                              |
+| Handling             | Tangent                          |
+|----------------------|----------------------------------|
+| Gå vänster/höger     | `A`/`D` eller `←`/`→`            |
+| Hoppa                | `W` eller `Space`                |
+| Dubbelhopp (volt!)   | Hoppa igen i luften              |
+| Sikta snett upp 45°  | `↑` eller `I` (Contra-schema)    |
+| Skjut                | `J`, `X` eller vänster musknapp  |
+| Ducka (+ skjut lågt) | `S` eller `↓`                    |
+| Starta om            | `R`                              |
 
-Touchkontroller visas automatiskt på mobil: `◀ ▶` för att gå, `⤒` hopp
-(tryck igen i luften för dubbelhopp/volt), `✹` skjut.
+Touchkontroller på mobil: **analog styrspak** på vänstra skärmhalvan (spaken
+föds där tummen landar — dra i sidled för att gå, uppåt för att sikta snett
+upp, nedåt för att ducka) samt `⤒` hopp och `✹` skjut till höger.
 
 ## Webapp (PWA)
 
@@ -47,6 +49,10 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
 - **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
   i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.
+- **Riktat sikte**: skjut snett upp 45° (stående) och hukad — frames från
+  tilläggssheeten `assets/commando-aims.png`, palettmappad mot originalet.
+- **Contra-död**: spelaren flyger bakåt av dödsträffen, snurrar och faller
+  genom världen — helt proceduriell, ingen döds-art behövs.
 - **Känsla**: coyote time, hoppbuffert, variabel hopphöjd, rekyl, skärmskak,
   partiklar (mynningsflamma, tomhylsor, gnistor, explosioner), parallax-solnedgång
   och WebAudio-syntade ljudeffekter.

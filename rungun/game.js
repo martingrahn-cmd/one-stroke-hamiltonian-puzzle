@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v6'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v7'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames (index i 8-kolumners grid) --------------------------
@@ -22,6 +22,16 @@ const F = {
 };
 const RUN_FRAMES = [8, 9, 10, 11, 12, 13, 14, 15];
 const FLIP_FRAMES = [20, 21, 22, 16];
+
+// Tilläggssheet: sikta/skjuta snett upp + hukad strid (assets/commando-aims.png,
+// samma 48x64 8-kolumnersgrid, palettmappad mot originalet)
+const AIMS = {
+  AIMD: 4,            // gevär höjt (redo snett upp)
+  FIRED: [12, 13, 5], // skjuta snett upp 45° med mynningsflamma
+  CAIM: 24,           // hukad sikta
+  CAIM2: 27,
+  CFIRE: [26, 28],    // hukad skjuta med flash
+};
 
 // Fiende: Renegade Grunt (assets/grunt.png, 6 använda kolumner per rad,
 // packad i samma 8-kolumners 48x64-grid). OBS: ritad vänstervänd.
@@ -140,15 +150,17 @@ addEventListener('keydown', e => {
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   audio();
-  if (!e.repeat && (e.code === 'Space' || e.code === 'KeyW' || e.code === 'ArrowUp')) pendingJump = true;
+  if (!e.repeat && (e.code === 'Space' || e.code === 'KeyW')) pendingJump = true;
   if (game.state !== 'play' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) startGame();
   if (game.state === 'play' && e.code === 'KeyR') startGame();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
-const inLeft  = () => keys['ArrowLeft'] || keys['KeyA'] || vbtn.left;
-const inRight = () => keys['ArrowRight'] || keys['KeyD'] || vbtn.right;
-const inDown  = () => keys['ArrowDown'] || keys['KeyS'];
-const inJump  = () => keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || vbtn.jump;
+// OBS: pil-upp är numera SIKTE (snett upp), inte hopp — Contra-schema
+const inLeft  = () => keys['ArrowLeft'] || keys['KeyA'] || stick.active && stick.vx < -0.35;
+const inRight = () => keys['ArrowRight'] || keys['KeyD'] || stick.active && stick.vx > 0.35;
+const inDown  = () => keys['ArrowDown'] || keys['KeyS'] || stick.active && stick.vy > 0.55 && Math.abs(stick.vx) < 0.45;
+const inUp    = () => keys['ArrowUp'] || keys['KeyI'] || stick.active && stick.vy < -0.45;
+const inJump  = () => keys['KeyW'] || keys['Space'] || vbtn.jump;
 const inFire  = () => keys['KeyJ'] || keys['KeyX'] || keys['ControlLeft'] || vbtn.fire || mouseFire;
 let mouseFire = false;
 canvas.addEventListener('mousedown', () => { audio(); if (game.state !== 'play') startGame(); else mouseFire = true; });
@@ -163,26 +175,45 @@ function canvasPos(t) {
   const oy = r.top + (r.height - s * H) / 2;
   return { x: (t.clientX - ox) / s, y: (t.clientY - oy) / s };
 }
+// Analog virtuell styrspak: vänstra halvan av skärmen är spak-zon —
+// spaken föds där tummen landar. Höger halva: hopp + eld-knappar.
+const stick = { active: false, id: -1, bx: 0, by: 0, vx: 0, vy: 0 };
 const TB = [
-  { id: 'left',  x: 56,      y: H - 58, r: 36, label: '◀' },
-  { id: 'right', x: 142,     y: H - 58, r: 36, label: '▶' },
-  { id: 'jump',  x: W - 140, y: H - 58, r: 36, label: '⤒' },
-  { id: 'fire',  x: W - 54,  y: H - 58, r: 36, label: '✹' },
+  { id: 'jump', x: W - 140, y: H - 58, r: 36, label: '⤒' },
+  { id: 'fire', x: W - 54,  y: H - 58, r: 36, label: '✹' },
 ];
+const STICK_R = 34; // max utslag i canvas-pixlar
 function updateTouches(e) {
   e.preventDefault();
   touchUI = true;
   audio();
   const wasJump = vbtn.jump;
-  vbtn.left = vbtn.right = vbtn.jump = vbtn.fire = false;
+  vbtn.jump = vbtn.fire = false;
+  let stickSeen = false;
   for (const t of e.touches) {
     const p = canvasPos(t);
+    if (t.identifier === stick.id && stick.active) {
+      stick.vx = Math.max(-1, Math.min(1, (p.x - stick.bx) / STICK_R));
+      stick.vy = Math.max(-1, Math.min(1, (p.y - stick.by) / STICK_R));
+      stickSeen = true;
+      continue;
+    }
+    let onButton = false;
     for (const b of TB) {
-      if (Math.hypot(p.x - b.x, p.y - b.y) < b.r + 22) vbtn[b.id] = true;
+      if (Math.hypot(p.x - b.x, p.y - b.y) < b.r + 22) { vbtn[b.id] = true; onButton = true; }
+    }
+    if (!onButton && !stick.active && p.x < W * 0.5 && e.type === 'touchstart') {
+      stick.active = true; stick.id = t.identifier;
+      stick.bx = p.x; stick.by = p.y; stick.vx = stick.vy = 0;
+      stickSeen = true;
     }
   }
+  if (stick.active && !stickSeen) {
+    // spak-fingret släppt (eller touchcancel)
+    stick.active = false; stick.id = -1; stick.vx = stick.vy = 0;
+  }
   if (vbtn.jump && !wasJump) pendingJump = true;
-  if (game.state !== 'play' && e.touches.length && !vbtn.left && !vbtn.right && !vbtn.jump && !vbtn.fire) startGame();
+  if (game.state !== 'play' && e.touches.length) startGame();
 }
 canvas.addEventListener('touchstart', updateTouches, { passive: false });
 canvas.addEventListener('touchmove', updateTouches, { passive: false });
@@ -200,6 +231,8 @@ const heavySheet = new Image();
 heavySheet.src = 'assets/heavy.png';
 const heliSheet = new Image();
 heliSheet.src = 'assets/heli.png';
+const aimsSheet = new Image();
+aimsSheet.src = 'assets/commando-aims.png';
 sheet.onload = () => {
   buildTerrain();
   buildParallax();
@@ -400,6 +433,7 @@ function makePlayer(x, y) {
     fireT: 0, flashT: 0,
     hp: 5, maxHp: 5, inv: 0,
     spreadT: 0, shieldT: 0,
+    aimUp: false, deathT: 0,
     animT: 0,
   };
 }
@@ -511,24 +545,39 @@ function updatePlayer(p, dt) {
   p.spreadT = Math.max(0, p.spreadT - dt);
   p.shieldT = Math.max(0, p.shieldT - dt);
 
-  // skjuta
+  // sikte: snett upp 45° (Contra-stil) — pil-upp eller spak uppåt
+  p.aimUp = inUp() && !p.crouch;
+
+  // skjuta (nu även hukad och diagonalt)
   p.fireT -= dt; p.flashT -= dt;
-  if (inFire() && p.fireT <= 0 && !p.crouch) {
+  if (inFire() && p.fireT <= 0) {
     p.fireT = p.spreadT > 0 ? 0.11 : 0.13;
     p.flashT = 0.06;
-    const my = p.y - (p.grounded && inDown() ? 20 : 30);
-    const mx = p.x + p.facing * 26;
+    const f = p.facing;
+    let mx, my, bvx, bvy;
+    if (p.aimUp) {
+      mx = p.x + f * 16; my = p.y - 46;
+      bvx = f * 510; bvy = -510;
+    } else if (p.crouch) {
+      mx = p.x + f * 26; my = p.y - 15;
+      bvx = f * 720; bvy = 0;
+    } else {
+      mx = p.x + f * 26; my = p.y - 30;
+      bvx = f * 720; bvy = 0;
+    }
     if (p.spreadT > 0) {
-      for (const vy of [-130, 0, 130]) {
-        game.bullets.push({ x: mx, y: my, vx: p.facing * 720, vy, life: 0.9 });
+      for (const off of [-130, 0, 130]) {
+        // sprid vinkelrätt mot skottriktningen
+        const px2 = p.aimUp ? off * 0.7 : 0, py2 = p.aimUp ? off * 0.7 : off;
+        game.bullets.push({ x: mx, y: my, vx: bvx + f * px2, vy: bvy + py2, life: 0.9 });
       }
     } else {
-      game.bullets.push({ x: mx, y: my, vx: p.facing * 720, vy: (Math.random() - 0.5) * 26, life: 0.9 });
+      game.bullets.push({ x: mx, y: my, vx: bvx, vy: bvy + (p.aimUp ? 0 : (Math.random() - 0.5) * 26), life: 0.9 });
     }
-    p.vx -= p.facing * 26; // rekyl
+    p.vx -= f * (p.crouch ? 10 : 26); // rekyl (mindre hukad)
     SFX.shoot();
-    spawnFlash(mx + p.facing * 4, my, p.facing);
-    spawnShell(p.x - p.facing * 4, my - 4, -p.facing);
+    spawnFlash(mx + f * 4, my - (p.aimUp ? 4 : 0), f);
+    spawnShell(p.x - f * 4, my - 4, -f);
   }
 
   // faror
@@ -566,7 +615,15 @@ function hurtPlayer(p, dmg, kbx, silentPos) {
   game.shake = Math.max(game.shake, 5);
   SFX.hurt();
   spawnSparks(p.x, p.y - 26, 10, '#ff5544');
-  if (p.hp <= 0) { game.state = 'dead'; SFX.dead(); }
+  if (p.hp <= 0) {
+    // Contra-död: flyg bakåt av träffen, snurra och fall genom världen
+    game.state = 'dead';
+    p.deathT = 0;
+    p.vy = -430;
+    p.vx = -p.facing * 190;
+    game.shake = 9;
+    SFX.dead();
+  }
 }
 
 // ---- Fiender -------------------------------------------------------------
@@ -936,20 +993,32 @@ function updatePickups(dt, p) {
 
 // ---- Rendering ---------------------------------------------------------------
 function playerFrame(p) {
-  if (game.state === 'dead') return F.FLIPDN;
-  if (p.crouch) return p.flashT > 0 ? F.KNEEL2 : F.CROUCH;
+  // returnerar [bild, frameindex] — bassheeten eller tilläggssheeten (aims)
+  const hasAims = aimsSheet.complete && aimsSheet.naturalWidth;
+  if (game.state === 'dead') return [sheet, F.TUCK];
+  if (p.crouch && hasAims) {
+    if (p.flashT > 0) return [aimsSheet, AIMS.CFIRE[Math.floor(p.animT * 20) % 2]];
+    if (inFire()) return [aimsSheet, AIMS.CAIM];
+    return [aimsSheet, AIMS.CAIM2];
+  }
+  if (p.crouch) return [sheet, p.flashT > 0 ? F.KNEEL2 : F.CROUCH];
   if (!p.grounded) {
     if (p.flipT >= 0) {
       const i = Math.floor(p.flipT * 14);
-      return i < FLIP_FRAMES.length ? FLIP_FRAMES[i] : F.LEAP;
+      return [sheet, i < FLIP_FRAMES.length ? FLIP_FRAMES[i] : F.LEAP];
     }
-    return p.vy < -60 ? F.RISE : F.LEAP;
+    return [sheet, p.vy < -60 ? F.RISE : F.LEAP];
   }
-  if (p.landT > 0.06 && Math.abs(p.vx) < 40) return F.LAND;
-  if (Math.abs(p.vx) > 30) return RUN_FRAMES[Math.floor(p.animT * 14) % 8];
-  if (p.flashT > 0) return F.FLASH;
-  if (inFire()) return F.AIM;
-  return Math.sin(p.animT * 2.4) > 0.65 ? F.RAISED : F.IDLE;
+  if (p.landT > 0.06 && Math.abs(p.vx) < 40) return [sheet, F.LAND];
+  if (Math.abs(p.vx) > 30) return [sheet, RUN_FRAMES[Math.floor(p.animT * 14) % 8]];
+  // stående med sikte snett upp
+  if (p.aimUp && hasAims) {
+    if (p.flashT > 0) return [aimsSheet, AIMS.FIRED[Math.floor(p.animT * 18) % 3]];
+    return [aimsSheet, AIMS.AIMD];
+  }
+  if (p.flashT > 0) return [sheet, F.FLASH];
+  if (inFire()) return [sheet, F.AIM];
+  return [sheet, Math.sin(p.animT * 2.4) > 0.65 ? F.RAISED : F.IDLE];
 }
 function heavyFrame(h) {
   if (h.hp <= 0) return HV.DEATH[Math.min(HV.DEATH.length - 1, Math.floor(h.dieT * 7))];
@@ -1094,9 +1163,22 @@ function render() {
   }
 
   // spelare
-  if (game.state !== 'dead' || Math.floor(game.time * 8) % 2 === 0) {
+  if (game.state === 'dead') {
+    // Contra-död: snurrande kropp som flyger genom luften
+    if (sheet.complete) {
+      ctx.save();
+      ctx.translate(Math.round(p.x), Math.round(p.y - 24));
+      ctx.rotate((p.deathT || 0) * 9 * -p.facing);
+      if (p.facing < 0) ctx.scale(-1, 1);
+      ctx.drawImage(sheet, (F.TUCK % COLS) * FW, Math.floor(F.TUCK / COLS) * FH, FW, FH, -FW / 2, -FH / 2, FW, FH);
+      ctx.restore();
+    }
+  } else {
     const blink = p.inv > 0 && Math.floor(game.time * 12) % 2 === 0;
-    if (!blink && sheet.complete) drawFrame(sheet, playerFrame(p), p.x, p.y, p.facing < 0);
+    if (!blink && sheet.complete) {
+      const [img, fi] = playerFrame(p);
+      drawFrame(img, fi, p.x, p.y, p.facing < 0);
+    }
   }
   // sköld-aura
   if (p.shieldT > 0) {
@@ -1317,9 +1399,9 @@ function drawTitle() {
     ctx.restore();
   }
   if (touchUI) {
-    bigText('◀ ▶ gå · ⤒ hopp (tryck igen i luften = volt!) · ✹ skjut', 285, 11, '#dfe6ff');
+    bigText('✛ spak: gå/sikta upp/ducka · ⤒ hopp (x2 = volt!) · ✹ skjut', 285, 11, '#dfe6ff');
   } else {
-    bigText('A/D eller ←→ · W/SPACE hopp (dubbelhopp = volt!) · J/X/musknapp skjut · S duck', 285, 11, '#dfe6ff');
+    bigText('A/D gå · W/SPACE hopp (x2 = volt!) · ↑ sikta snett upp · S ducka · J/X/mus skjut', 285, 11, '#dfe6ff');
   }
   const b = Math.sin(game.time * 5) > -0.2;
   if (b) bigText(touchUI ? 'TRYCK FÖR ATT STARTA' : 'TRYCK ENTER FÖR ATT STARTA', 320, 15, '#5eff7a');
@@ -1345,6 +1427,7 @@ function drawWin() {
   if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 285, 13, '#ffd25e');
 }
 function drawTouchUI() {
+  // knappar (hopp + eld)
   for (const b of TB) {
     ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
     ctx.fillStyle = vbtn[b.id] ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.14)';
@@ -1353,6 +1436,22 @@ function drawTouchUI() {
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.font = '22px monospace'; ctx.textAlign = 'center';
     ctx.fillText(b.label, b.x, b.y + 8);
+  }
+  // analogspak: bas + knopp där tummen är; vilande hint annars
+  if (stick.active) {
+    ctx.beginPath(); ctx.arc(stick.bx, stick.by, STICK_R + 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(stick.bx + stick.vx * STICK_R, stick.by + stick.vy * STICK_R, 20, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(86, H - 64, STICK_R + 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.07)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.font = '13px monospace'; ctx.textAlign = 'center';
+    ctx.fillText('✛', 86, H - 59);
   }
 }
 
@@ -1373,8 +1472,12 @@ function loop(now) {
     updateRockets(dt, game.player);
     updatePickups(dt, game.player);
   } else if (game.state === 'dead') {
-    game.player.vy += GRAV * dt;
-    moveBody(game.player, dt, true);
+    // fritt fall genom världen (Contra-stil), ingen kollision
+    const p = game.player;
+    p.deathT = (p.deathT || 0) + dt;
+    p.vy += GRAV * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
   }
   updateParticles(dt);
 
