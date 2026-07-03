@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v7'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v8'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames (index i 8-kolumners grid) --------------------------
@@ -378,6 +378,22 @@ function goFullscreen() {
   if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
 }
 
+// ---- 80-tals one-liners (till Tommy) ----------------------------------------
+const QUIPS = [
+  "I'll be back.",
+  'Yippee ki yay!',
+  "I ain't got time to bleed.",
+  'Consider that a divorce.',
+  "It's showtime!",
+  'Knock knock.',
+  'Let off some steam.',
+  'Dead or alive, you\'re coming with me.',
+  'Come with me if you want to live.',
+];
+function spawnQuip(x, y) {
+  game.quips.push({ text: QUIPS[game.quipIdx++ % QUIPS.length], x, y, t: 0 });
+}
+
 // ---- Speltillstånd ----------------------------------------------------------
 const game = {};
 function startGame() {
@@ -399,6 +415,9 @@ function startGame() {
   game.msg = null; game.msgT = 0;
   game.boss = null;
   game.bossDead = false;
+  game.quips = [];
+  game.quipIdx = Math.floor(Math.random() * 9);
+  game.choppaT = 0;
 
   let px = 2 * TILE, py = 9 * TILE;
   game.finishX = LEVEL_W - 3 * TILE;
@@ -724,7 +743,7 @@ function updateHeavy(h, dt, p) {
 function makeBoss() {
   return {
     x: BOSS_TRIGGER_X + W + 180, y: 150,
-    hp: 35, maxHp: 35,
+    hp: 47, maxHp: 47, // 47 — såklart
     state: 'enter', t: 0, animT: 0,
     cool: 2.2, flashT: 0, hitT: 0, dieT: -1,
     facing: -1, fireT: 0, strafeDir: -1, boomT: 0, drops: 0,
@@ -752,6 +771,7 @@ function updateBoss(b, dt, p) {
       game.score += 1000; game.kills++;
       game.bossDead = true;
       game.boss = null;
+      game.choppaT = 3.5; // "GET TO THE CHOPPA!"
       SFX.bossdie();
     }
     return;
@@ -940,6 +960,7 @@ function killEnemy(e) {
   SFX.edie();
   game.shake = Math.max(game.shake, 3);
   spawnSparks(e.x, e.y - 30, 10, '#a3232b'); // träffreaktionen sköter resten
+  if (game.kills % 3 === 0) spawnQuip(game.player.x, game.player.y - 60);
 }
 function killBoom(x, y) {
   SFX.edie();
@@ -983,7 +1004,7 @@ function updatePickups(dt, p) {
       if (u.type === 'med') { p.hp = Math.min(p.maxHp, p.hp + 1); SFX.heal(); }
       else if (u.type === 'spread') { p.spreadT = 12; game.score += 100; SFX.power(); }
       else if (u.type === 'shield') { p.shieldT = 8; game.score += 100; SFX.power(); }
-      else { game.score += 50; SFX.pickup(); }
+      else { game.score += 47; SFX.pickup(); } // 47 poäng per stjärna, för Tommy
       const cols = { med: '#7dff9b', spread: '#ffa94e', shield: '#6ee7ff', star: '#ffe066' };
       spawnSparks(u.x, u.y, 10, cols[u.type]);
     }
@@ -1226,9 +1247,27 @@ function render() {
     } else ctx.fillRect(pa.x - pa.sz / 2, pa.y - pa.sz / 2, pa.sz, pa.sz);
   }
 
+  // 80-tals one-liners som svävar upp
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  for (const q of game.quips) {
+    const a = Math.max(0, Math.min(1, 2.2 - q.t));
+    ctx.fillStyle = `rgba(0,0,0,${0.6 * a})`;
+    ctx.fillText('"' + q.text + '"', q.x + 1, q.y - q.t * 18 + 1);
+    ctx.fillStyle = `rgba(255,210,94,${a})`;
+    ctx.fillText('"' + q.text + '"', q.x, q.y - q.t * 18);
+  }
+
   ctx.restore();
 
   drawHUD(p);
+  // "GET TO THE CHOPPA!" när luftrummet säkrats
+  if (game.choppaT > 0 && game.state === 'play') {
+    const a = Math.min(1, game.choppaT);
+    ctx.save(); ctx.globalAlpha = a;
+    bigText('GET TO THE CHOPPA!', 120, 26, '#5eff7a', '#0a4');
+    ctx.restore();
+  }
   if (game.state === 'title') drawTitle();
   if (game.state === 'dead') drawDead();
   if (game.state === 'win') drawWin();
@@ -1311,9 +1350,13 @@ function drawExtraction(x, y) {
 }
 
 function drawHUD(p) {
-  // hjärtan
+  // hjärtan + namnet på hjälten
+  ctx.fillStyle = '#5ce8f5';
+  ctx.font = 'bold 9px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('TOMMY', 14, 9);
   for (let i = 0; i < p.maxHp; i++) {
-    const x = 14 + i * 18, y = 14;
+    const x = 14 + i * 18, y = 20;
     ctx.fillStyle = i < p.hp ? '#ff4757' : 'rgba(255,255,255,0.18)';
     heart(ctx, x, y, 7);
   }
@@ -1384,10 +1427,42 @@ function bigText(txt, y, size, col, glow) {
   ctx.fillText(txt, W / 2, y);
   ctx.shadowBlur = 0;
 }
+function drawCake(x, y, s) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  // fat
+  ctx.fillStyle = '#dfe6ff'; ctx.fillRect(-30, 18, 60, 4);
+  // botten + topp
+  ctx.fillStyle = '#8a4a2b'; ctx.fillRect(-24, 4, 48, 14);
+  ctx.fillStyle = '#ff8ac2'; ctx.fillRect(-20, -8, 40, 12);
+  // glasyrdroppar
+  ctx.fillStyle = '#fff';
+  for (let i = 0; i < 5; i++) ctx.fillRect(-18 + i * 8, -8, 4, 5 + (i % 2) * 3);
+  // siffer-ljus "47"
+  ctx.fillStyle = '#5ce8f5';
+  ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('47', 0, -14);
+  // lågor
+  const fl = Math.sin(game.time * 9) * 1.5;
+  ctx.fillStyle = '#ffd25e';
+  ctx.beginPath(); ctx.ellipse(-8, -28 + fl, 2.5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(9, -28 - fl, 2.5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
 function drawTitle() {
   panel(0.55);
-  bigText('COMMANDO STRIKE', 120, 38, '#ffd25e', '#ff8c42');
-  bigText('RUN & GUN — PROTOTYP · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#ffb0a0');
+  // 80-tals neonbanner för födelsedagsbarnet
+  const pulse = 0.75 + Math.sin(game.time * 3) * 0.25;
+  ctx.save(); ctx.globalAlpha = pulse;
+  bigText('★ GRATTIS PÅ 47-ÅRSDAGEN ★', 52, 15, '#ff4fd8', '#ff4fd8');
+  ctx.restore();
+  bigText('TOMMY STRIKE', 120, 40, '#ffd25e', '#ff8c42');
+  bigText('EN 80-TALS ACTIONHYLLNING · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
+  bigText('3 JULI 2026 — TOMMYS DAG', 170, 10, '#ffb0a0');
+  drawCake(W / 2 - 130, 235, 1.0);
+  drawCake(W / 2 + 130, 235, 1.0);
   ctx.textAlign = 'right';
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
@@ -1415,16 +1490,29 @@ function drawTitle() {
 function drawDead() {
   panel(0.55);
   bigText('DU STUPADE', 150, 36, '#ff4757', '#800');
-  bigText('SCORE ' + game.score + '  ·  ' + game.kills + ' FIENDER', 185, 14, '#fff');
+  bigText('ÄVEN LEGENDER LADDAR OM', 178, 12, '#ffb0a0');
+  bigText('SCORE ' + game.score + '  ·  ' + game.kills + ' FIENDER', 205, 14, '#fff');
   if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR NYTT FÖRSÖK', 230, 14, '#ffd25e');
 }
 function drawWin() {
   panel(0.5);
-  bigText('EXTRAKTION LYCKADES!', 130, 30, '#5eff7a', '#0a4');
-  bigText('SEKTOR 1 SÄKRAD', 160, 14, '#c8ffd4');
-  bigText('SCORE ' + game.score, 205, 20, '#ffd25e');
-  bigText('FIENDER NEDGJORDA: ' + game.kills + '   TID: ' + game.time.toFixed(1) + 's', 235, 13, '#fff');
-  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 285, 13, '#ffd25e');
+  // fyrverkerier!
+  if (Math.random() < 0.09) {
+    const cols = ['#ff4fd8', '#5ce8f5', '#ffd25e', '#5eff7a', '#ff8c42'];
+    const fx = game.camX + 60 + Math.random() * (W - 120), fy = game.camY + 40 + Math.random() * 140;
+    const col = cols[Math.floor(Math.random() * cols.length)];
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 40 + Math.random() * 130;
+      game.particles.push({ x: fx, y: fy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 0.6 + Math.random() * 0.5, col, sz: 2.5, grav: 120 });
+    }
+  }
+  bigText('GRATTIS TOMMY!', 110, 40, '#ff4fd8', '#ff4fd8');
+  bigText('47 ÅR — LEGENDEN LEVER', 145, 18, '#5ce8f5', '#0aa');
+  drawCake(W / 2, 205, 1.15);
+  bigText('SEKTOR 1 SÄKRAD · SCORE ' + game.score + ' · ' + game.kills + ' FIENDER · ' + game.time.toFixed(1) + 's', 250, 12, '#fff');
+  bigText('EN GAMMAL RÄV ÄR FARLIGARE ÄN NÅGONSIN', 275, 11, '#ffd25e');
+  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 315, 13, '#5eff7a');
 }
 function drawTouchUI() {
   // knappar (hopp + eld)
@@ -1480,6 +1568,9 @@ function loop(now) {
     p.y += p.vy * dt;
   }
   updateParticles(dt);
+  game.choppaT = Math.max(0, game.choppaT - dt);
+  for (const q of game.quips) q.t += dt;
+  game.quips = game.quips.filter(q => q.t < 2.2);
 
   render();
   requestAnimationFrame(loop);

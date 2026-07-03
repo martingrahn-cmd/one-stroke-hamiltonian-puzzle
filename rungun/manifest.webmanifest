@@ -1,17 +1,35 @@
 {
-  "name": "Commando Strike",
-  "short_name": "Commando",
-  "description": "Run & gun-prototyp — Sektor 1: Jungle Extraction",
+  "name": "Tommy Strike — 47",
+  "short_name": "Tommy 47",
+  "description": "80-tals run & gun-hyllning till Tommy på 47-årsdagen, 3 juli 2026",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone"],
+  "display_override": [
+    "fullscreen",
+    "standalone"
+  ],
   "orientation": "landscape",
   "background_color": "#0d0b14",
   "theme_color": "#0d0b14",
   "icons": [
-    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
