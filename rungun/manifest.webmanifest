@@ -1,7 +1,7 @@
 {
-  "name": "Tommy Strike — 47",
-  "short_name": "Tommy 47",
-  "description": "80-tals run & gun-hyllning till Tommy på 47-årsdagen, 3 juli 2026",
+  "name": "Commando Strike",
+  "short_name": "Commando",
+  "description": "80-tals run & gun — Sektor 1: Jungle Extraction",
   "start_url": "./",
   "scope": "./",
   "display": "fullscreen",
