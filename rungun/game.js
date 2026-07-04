@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v8'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v9'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames (index i 8-kolumners grid) --------------------------
@@ -68,12 +68,12 @@ const MAP_SRC = [
 '                                                                                                                                                                                                        ',
 '                                                                                                                                                                                                        ',
 '                                                                                                         *                                                                                              ',
-'                                        *                                                     D        =====                                     D                          *  *  *                     ',
+'                                        *                                               D     D        =====                                     D                          *  *  *                     ',
 '                              *      ====                * * *                  ==== M                                        E                =====                      =========                     ',
 '                            ====                        =======                =======            E                        ======      *  *                                                             ',
 '                                          E                        D                            ======        C          ==========   =====          E          M                    E  E               ',
 '                 *  *                  ======                                        C C                 *   CC                                    =======     ====                 ========            ',
-'          M                                             E              E            CCCC       C    R   CCC CCC              E                                                E               R    F    ',
+'          M                       E                     E              E            CCCC       C    R   CCC CCC              E                           E                    E               R    F    ',
 '   P         C        E        C                     ########      ##########      ######     ===      #########         ========       ==     =======     SS    SS                   C C               ',
 '#######################################   ###   #####        ######          ######      #####   ######         #########        ##### ### ####       ####################   #########################  ',
 '####################################### S ### S #####        ######          ######      #####   ######         #########        ##### ### ####       ####################SSS#########################  ',
@@ -743,7 +743,7 @@ function updateHeavy(h, dt, p) {
 function makeBoss() {
   return {
     x: BOSS_TRIGGER_X + W + 180, y: 150,
-    hp: 47, maxHp: 47, // 47 — såklart
+    hp: 38, maxHp: 38, // lite tuffare än ursprungliga 35 nu när man kan sikta uppåt
     state: 'enter', t: 0, animT: 0,
     cool: 2.2, flashT: 0, hitT: 0, dieT: -1,
     facing: -1, fireT: 0, strafeDir: -1, boomT: 0, drops: 0,
@@ -1004,7 +1004,7 @@ function updatePickups(dt, p) {
       if (u.type === 'med') { p.hp = Math.min(p.maxHp, p.hp + 1); SFX.heal(); }
       else if (u.type === 'spread') { p.spreadT = 12; game.score += 100; SFX.power(); }
       else if (u.type === 'shield') { p.shieldT = 8; game.score += 100; SFX.power(); }
-      else { game.score += 47; SFX.pickup(); } // 47 poäng per stjärna, för Tommy
+      else { game.score += 50; SFX.pickup(); }
       const cols = { med: '#7dff9b', spread: '#ffa94e', shield: '#6ee7ff', star: '#ffe066' };
       spawnSparks(u.x, u.y, 10, cols[u.type]);
     }
@@ -1350,13 +1350,9 @@ function drawExtraction(x, y) {
 }
 
 function drawHUD(p) {
-  // hjärtan + namnet på hjälten
-  ctx.fillStyle = '#5ce8f5';
-  ctx.font = 'bold 9px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText('TOMMY', 14, 9);
+  // hjärtan
   for (let i = 0; i < p.maxHp; i++) {
-    const x = 14 + i * 18, y = 20;
+    const x = 14 + i * 18, y = 14;
     ctx.fillStyle = i < p.hp ? '#ff4757' : 'rgba(255,255,255,0.18)';
     heart(ctx, x, y, 7);
   }
@@ -1427,42 +1423,10 @@ function bigText(txt, y, size, col, glow) {
   ctx.fillText(txt, W / 2, y);
   ctx.shadowBlur = 0;
 }
-function drawCake(x, y, s) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(s, s);
-  // fat
-  ctx.fillStyle = '#dfe6ff'; ctx.fillRect(-30, 18, 60, 4);
-  // botten + topp
-  ctx.fillStyle = '#8a4a2b'; ctx.fillRect(-24, 4, 48, 14);
-  ctx.fillStyle = '#ff8ac2'; ctx.fillRect(-20, -8, 40, 12);
-  // glasyrdroppar
-  ctx.fillStyle = '#fff';
-  for (let i = 0; i < 5; i++) ctx.fillRect(-18 + i * 8, -8, 4, 5 + (i % 2) * 3);
-  // siffer-ljus "47"
-  ctx.fillStyle = '#5ce8f5';
-  ctx.font = 'bold 16px monospace'; ctx.textAlign = 'center';
-  ctx.fillText('47', 0, -14);
-  // lågor
-  const fl = Math.sin(game.time * 9) * 1.5;
-  ctx.fillStyle = '#ffd25e';
-  ctx.beginPath(); ctx.ellipse(-8, -28 + fl, 2.5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(9, -28 - fl, 2.5, 4.5, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-}
-
 function drawTitle() {
   panel(0.55);
-  // 80-tals neonbanner för födelsedagsbarnet
-  const pulse = 0.75 + Math.sin(game.time * 3) * 0.25;
-  ctx.save(); ctx.globalAlpha = pulse;
-  bigText('★ GRATTIS PÅ 47-ÅRSDAGEN ★', 52, 15, '#ff4fd8', '#ff4fd8');
-  ctx.restore();
-  bigText('TOMMY STRIKE', 120, 40, '#ffd25e', '#ff8c42');
-  bigText('EN 80-TALS ACTIONHYLLNING · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
-  bigText('3 JULI 2026 — TOMMYS DAG', 170, 10, '#ffb0a0');
-  drawCake(W / 2 - 130, 235, 1.0);
-  drawCake(W / 2 + 130, 235, 1.0);
+  bigText('COMMANDO STRIKE', 120, 38, '#ffd25e', '#ff8c42');
+  bigText('RUN & GUN — 80-TALS ACTION · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
   ctx.textAlign = 'right';
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
@@ -1507,12 +1471,12 @@ function drawWin() {
         life: 0.6 + Math.random() * 0.5, col, sz: 2.5, grav: 120 });
     }
   }
-  bigText('GRATTIS TOMMY!', 110, 40, '#ff4fd8', '#ff4fd8');
-  bigText('47 ÅR — LEGENDEN LEVER', 145, 18, '#5ce8f5', '#0aa');
-  drawCake(W / 2, 205, 1.15);
-  bigText('SEKTOR 1 SÄKRAD · SCORE ' + game.score + ' · ' + game.kills + ' FIENDER · ' + game.time.toFixed(1) + 's', 250, 12, '#fff');
-  bigText('EN GAMMAL RÄV ÄR FARLIGARE ÄN NÅGONSIN', 275, 11, '#ffd25e');
-  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 315, 13, '#5eff7a');
+  bigText('EXTRAKTION LYCKADES!', 120, 32, '#5eff7a', '#0a4');
+  bigText('SEKTOR 1 SÄKRAD', 150, 14, '#c8ffd4');
+  bigText('MISSION ACCOMPLISHED. LET OFF SOME STEAM.', 175, 11, '#ffd25e');
+  bigText('SCORE ' + game.score, 220, 22, '#ffd25e');
+  bigText('FIENDER NEDGJORDA: ' + game.kills + '   TID: ' + game.time.toFixed(1) + 's', 250, 13, '#fff');
+  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 300, 13, '#5eff7a');
 }
 function drawTouchUI() {
   // knappar (hopp + eld)
