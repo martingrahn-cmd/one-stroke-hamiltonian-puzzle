@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v15'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v16'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -487,20 +487,49 @@ function goFullscreen() {
   if (screen.orientation && screen.orientation.lock) screen.orientation.lock('landscape').catch(() => {});
 }
 
-// ---- 80-tals one-liners (till Tommy) ----------------------------------------
+// ---- One-liners: 80-tals action + Duke Nukem-anda ---------------------------
 const QUIPS = [
+  // Schwarzenegger / Terminator / Predator / Commando
   "I'll be back.",
-  'Yippee ki yay!',
+  'Hasta la vista, baby.',
+  "Get to the choppa!",
+  'Stick around.',
+  'If it bleeds, we can kill it.',
   "I ain't got time to bleed.",
   'Consider that a divorce.',
-  "It's showtime!",
+  "Let off some steam.",
+  "You're fired.",
   'Knock knock.',
-  'Let off some steam.',
-  'Dead or alive, you\'re coming with me.',
+  // Die Hard / Aliens / Predator crew
+  'Yippee ki-yay!',
+  'Game over, man!',
+  'Piece of cake.',
+  'What are you waiting for? Christmas?',
   'Come with me if you want to live.',
+  'Dead or alive, you\'re coming with me.',
+  // Duke Nukem 3D
+  'Come get some.',
+  'Hail to the king, baby.',
+  "Damn, I'm good.",
+  'Rest in pieces.',
+  "Let God sort 'em out.",
+  'Who wants some?',
+  'Groovy.',
+  "Kick ass, chew gum — all outta gum.",
+  'Ready for action!',
+  'Nobody messes with me.',
+  // extra flavor
+  "It's showtime!",
+  'Eat lead.',
+  'Lights out.',
+  'Nap time, tin can.',
+  'Class dismissed.',
 ];
 function spawnQuip(x, y) {
-  game.quips.push({ text: QUIPS[game.quipIdx++ % QUIPS.length], x, y, t: 0 });
+  let i;
+  do { i = Math.floor(Math.random() * QUIPS.length); } while (QUIPS.length > 1 && i === game.lastQuip);
+  game.lastQuip = i;
+  game.quips.push({ text: QUIPS[i], x, y, t: 0 });
 }
 // central kill-räknare — ALLA kills (grunts, heavies, drönare, boss)
 // räknas och triggar en one-liner varannan
@@ -516,7 +545,7 @@ function startGame() {
   if (touchUI) goFullscreen();
   game.score = 0;
   game.kills = 0;
-  game.quipIdx = Math.floor(Math.random() * 9);
+  game.lastQuip = -1;
   game.hpCarry = 5;
   loadLevel(0);
   game.state = 'play';
