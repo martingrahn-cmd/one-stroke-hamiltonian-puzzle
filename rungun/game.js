@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v13'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v14'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -153,7 +153,7 @@ addEventListener('keydown', e => {
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code)) e.preventDefault();
   keys[e.code] = true;
   audio();
-  if (!e.repeat && (e.code === 'Space' || e.code === 'KeyW')) pendingJump = true;
+  if (!e.repeat && e.code === 'Space') pendingJump = true;
   if (game.state !== 'play' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) startGame();
   if (game.state === 'play' && e.code === 'KeyR') startGame();
 });
@@ -162,8 +162,9 @@ addEventListener('keyup', e => { keys[e.code] = false; });
 const inLeft  = () => keys['ArrowLeft'] || keys['KeyA'] || stick.active && stick.vx < -0.35;
 const inRight = () => keys['ArrowRight'] || keys['KeyD'] || stick.active && stick.vx > 0.35;
 const inDown  = () => keys['ArrowDown'] || keys['KeyS'] || stick.active && stick.vy > 0.55 && Math.abs(stick.vx) < 0.45;
-const inUp    = () => keys['ArrowUp'] || keys['KeyI'] || stick.active && stick.vy < -0.45;
-const inJump  = () => keys['KeyW'] || keys['Space'] || vbtn.jump;
+// W = sikta upp (matchar spakens 'riktning = sikte'), Space = hopp
+const inUp    = () => keys['ArrowUp'] || keys['KeyW'] || keys['KeyI'] || stick.active && stick.vy < -0.45;
+const inJump  = () => keys['Space'] || vbtn.jump;
 const inFire  = () => keys['KeyJ'] || keys['KeyX'] || keys['ControlLeft'] || vbtn.fire || mouseFire;
 let mouseFire = false;
 canvas.addEventListener('mousedown', () => { audio(); if (game.state !== 'play') startGame(); else mouseFire = true; });
@@ -1489,7 +1490,7 @@ function drawTitle() {
   if (touchUI) {
     bigText('✛ STICK: MOVE · AIM UP · CROUCH  |  ⤒ JUMP (x2 = FLIP!)  |  ✹ FIRE', 285, 11, '#dfe6ff');
   } else {
-    bigText('A/D MOVE · W/SPACE JUMP (x2 = FLIP!) · ↑ AIM UP · S CROUCH · J/X/MOUSE FIRE', 285, 11, '#dfe6ff');
+    bigText('A/D MOVE · W/↑ AIM UP · S CROUCH · SPACE JUMP (x2 = FLIP!) · J/X/MOUSE FIRE', 285, 11, '#dfe6ff');
   }
   const b = Math.sin(game.time * 5) > -0.2;
   if (b) bigText(touchUI ? 'TAP TO ENGAGE' : 'PRESS ENTER TO ENGAGE', 320, 15, '#5eff7a');
