@@ -11,10 +11,10 @@ webbserver (t.ex. `python3 -m http.server`) och spela.
 | Handling                  | Tangent                          |
 |---------------------------|----------------------------------|
 | Gå vänster/höger          | `A`/`D` eller `←`/`→`            |
-| Hoppa                     | `W` eller `Space`                |
+| Hoppa                     | `Space`                          |
 | Dubbelhopp (volt!)        | Hoppa igen i luften              |
-| Sikta RAKT UPP            | `↑`/`I` stillastående            |
-| Sikta snett upp 45°       | `↑`/`I` under löpning/i luften   |
+| Sikta RAKT UPP            | `W`/`↑` stillastående            |
+| Sikta snett upp 45°       | `W`/`↑` under löpning/i luften   |
 | Skjut                     | `J`, `X` eller vänster musknapp  |
 | Ducka / hukad gång + eld  | `S` eller `↓` (+ `A`/`D`)        |
 | Starta om                 | `R`                              |
