@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v10'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v11'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -18,6 +18,7 @@ const FW = 48, FH = 64, COLS = 8;
 // Spelaren: två sheets à 6 kolumner x 4 rader (48x64/frame), högervänd.
 // player-aim.png: sikte/eld i alla vinklar. player-move.png: rörelse.
 const PCOLS = 6;
+const PFW = 64, PFH = 64; // bredare ram än 48 — annars krymps breda run-frames
 const PA = { // player-aim.png
   IDLE: [0, 1],
   AIMF: 2, FIREF: [3, 4],       // rakt fram
@@ -676,10 +677,22 @@ function updateEnemy(e, dt, p) {
   const dx = p.x - e.x, dy = p.y - e.y;
   const sees = Math.abs(dx) < 300 && Math.abs(dy) < 70 && game.state === 'play' && p.inv < 1.0;
 
+  const canWalk = dir => {
+    // finns mark framför och ingen vägg? (så de inte vandrar ut i stup)
+    const ahead = e.x + dir * (e.w / 2 + 6);
+    const groundAhead = solidAt(Math.floor(ahead / TILE), Math.floor((e.y + 4) / TILE))
+                     || platformAt(Math.floor(ahead / TILE), Math.floor((e.y + 4) / TILE));
+    const wallAhead = solidAt(Math.floor(ahead / TILE), Math.floor((e.y - 20) / TILE));
+    return groundAhead && !wallAhead;
+  };
+
   if (sees) {
     e.facing = dx > 0 ? 1 : -1;
     e.state = 'aim';
-    e.vx = 0;
+    // tryck framåt mot spelaren mellan salvorna (Metal Slug-stil),
+    // stå bara stilla under själva bursten
+    if (e.burst > 0 || Math.abs(dx) < 90) e.vx = 0;
+    else e.vx = canWalk(e.facing) ? e.facing * 34 : 0;
     e.cool -= dt;
     if (e.cool <= 0 && e.burst === 0) { e.burst = 3; e.burstT = 0.25; }
     if (e.burst > 0) {
@@ -697,13 +710,9 @@ function updateEnemy(e, dt, p) {
   } else {
     e.state = 'patrol';
     e.burst = 0;
-    // patrullera: vänd vid kant eller vägg
-    const ahead = e.x + e.facing * (e.w / 2 + 6);
-    const groundAhead = solidAt(Math.floor(ahead / TILE), Math.floor((e.y + 4) / TILE))
-                     || platformAt(Math.floor(ahead / TILE), Math.floor((e.y + 4) / TILE));
-    const wallAhead = solidAt(Math.floor(ahead / TILE), Math.floor((e.y - 20) / TILE));
-    if ((!groundAhead || wallAhead) && e.grounded) e.facing *= -1;
-    e.vx = e.facing * 42;
+    // patrullera raskt, vänd vid kant eller vägg
+    if (!canWalk(e.facing) && e.grounded) e.facing *= -1;
+    e.vx = e.facing * 55;
   }
   e.flashT = (e.flashT || 0) - dt;
   e.vy += GRAV * dt;
@@ -725,7 +734,14 @@ function updateHeavy(h, dt, p) {
 
   if (sees) {
     h.facing = dx > 0 ? 1 : -1;
-    h.vx = 0;
+    // avancera tungt mot spelaren när den är långt bort och ingen windup pågår
+    if (h.windup < 0 && Math.abs(dx) > 200) {
+      const ahead = h.x + h.facing * (h.w / 2 + 6);
+      const ok = (solidAt(Math.floor(ahead / TILE), Math.floor((h.y + 4) / TILE))
+               || platformAt(Math.floor(ahead / TILE), Math.floor((h.y + 4) / TILE)))
+               && !solidAt(Math.floor(ahead / TILE), Math.floor((h.y - 24) / TILE));
+      h.vx = ok ? h.facing * 30 : 0;
+    } else h.vx = 0;
     if (h.windup >= 0) {
       h.windup += dt;
       if (h.windup >= 0.55) { // avfyra!
@@ -749,7 +765,7 @@ function updateHeavy(h, dt, p) {
                      || platformAt(Math.floor(ahead / TILE), Math.floor((h.y + 4) / TILE));
     const wallAhead = solidAt(Math.floor(ahead / TILE), Math.floor((h.y - 24) / TILE));
     if ((!groundAhead || wallAhead) && h.grounded) h.facing *= -1;
-    h.vx = h.facing * 24;
+    h.vx = h.facing * 32;
   }
   h.vy += GRAV * dt;
   moveBody(h, dt, true);
@@ -1218,14 +1234,14 @@ function render() {
       ctx.translate(Math.round(p.x), Math.round(p.y - 24));
       ctx.rotate((p.deathT || 0) * 9 * -p.facing);
       if (p.facing < 0) ctx.scale(-1, 1);
-      ctx.drawImage(pMove, (df % PCOLS) * FW, Math.floor(df / PCOLS) * FH, FW, FH, -FW / 2, -FH / 2, FW, FH);
+      ctx.drawImage(pMove, (df % PCOLS) * PFW, Math.floor(df / PCOLS) * PFH, PFW, PFH, -PFW / 2, -PFH / 2, PFW, PFH);
       ctx.restore();
     }
   } else {
     const blink = p.inv > 0 && Math.floor(game.time * 12) % 2 === 0;
     if (!blink && ready(pAim) && ready(pMove)) {
       const [img, fi] = playerFrame(p);
-      drawFrame(img, fi, p.x, p.y, p.facing < 0, FW, FH, PCOLS);
+      drawFrame(img, fi, p.x, p.y, p.facing < 0, PFW, PFH, PCOLS);
     }
   }
   // sköld-aura
@@ -1467,7 +1483,7 @@ function drawTitle() {
   if (ready(pMove)) {
     const fi = PM.RUN[Math.floor(game.time * 12) % 6];
     ctx.save(); ctx.translate(W / 2, 235); ctx.scale(1.6, 1.6);
-    drawFrame(pMove, fi, 0, 24, false, FW, FH, PCOLS);
+    drawFrame(pMove, fi, 0, 24, false, PFW, PFH, PCOLS);
     ctx.restore();
   }
   if (touchUI) {
