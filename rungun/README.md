@@ -64,9 +64,12 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
 - **Riktat sikte i alla lägen**: rakt upp (stående), snett upp 45° (löpning/
   luft, med egen runcykel) och hukad — inklusive hukad gång. All spelar-art
   från de nya player-sheetsen.
-- **80-tals one-liners**: varannan kill svävar ett actioncitat upp
-  ("I'll be back.", "Yippee ki yay!"...), och "GET TO THE CHOPPA!" när
-  bossen störtar. All speltext på engelska med 80-tals-flavor.
+- **80-tals one-liners**: varannan kill svävar ett actioncitat upp —
+  31 st ur Terminator/Predator/Die Hard/Aliens/Duke Nukem-arvet
+  ("Come get some.", "Hail to the king, baby.", "Hasta la vista, baby.",
+  "Rest in pieces."...), slumpvis valda utan direkt upprepning. Plus
+  "GET TO THE CHOPPA!" när helikopterbossen störtar. All speltext på
+  engelska med 80-tals-flavor.
 - **Contra-död**: spelaren flyger bakåt av dödsträffen, snurrar och faller
   genom världen — helt proceduriell, ingen döds-art behövs.
 - **Känsla**: coyote time, hoppbuffert, variabel hopphöjd, rekyl, skärmskak,
