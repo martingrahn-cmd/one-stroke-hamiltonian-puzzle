@@ -10,27 +10,29 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v9'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v10'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
-// ---- Sprite frames (index i 8-kolumners grid) --------------------------
+// ---- Sprite frames ---------------------------------------------------------
 const FW = 48, FH = 64, COLS = 8;
-const F = {
-  IDLE: 0, RAISED: 1, SPARK: 2, AIM: 3, AIM2: 4, AIM3: 5, AIM4: 6, FLASH: 7,
-  RUN0: 8, // 8..15
-  LEAP: 16, KNEEL: 17, KNEEL2: 18, CROUCH: 19, RISE: 20, TUCK: 21, FLIPDN: 22, LAND: 23,
+// Spelaren: två sheets à 6 kolumner x 4 rader (48x64/frame), högervänd.
+// player-aim.png: sikte/eld i alla vinklar. player-move.png: rörelse.
+const PCOLS = 6;
+const PA = { // player-aim.png
+  IDLE: [0, 1],
+  AIMF: 2, FIREF: [3, 4],       // rakt fram
+  AIMU: 6, FIREU: [7, 8],       // RAKT UPP
+  AIMD: 18, FIRED: [9, 11, 10], // snett upp 45°
+  CAIM: 23, CFIRE: [22, 16],    // hukad
 };
-const RUN_FRAMES = [8, 9, 10, 11, 12, 13, 14, 15];
-const FLIP_FRAMES = [20, 21, 22, 16];
-
-// Tilläggssheet: sikta/skjuta snett upp + hukad strid (assets/commando-aims.png,
-// samma 48x64 8-kolumnersgrid, palettmappad mot originalet)
-const AIMS = {
-  AIMD: 4,            // gevär höjt (redo snett upp)
-  FIRED: [12, 13, 5], // skjuta snett upp 45° med mynningsflamma
-  CAIM: 24,           // hukad sikta
-  CAIM2: 27,
-  CFIRE: [26, 28],    // hukad skjuta med flash
+const PM = { // player-move.png
+  RUN: [0, 1, 2, 3, 4, 5],
+  RUNUP: [6, 7, 8],             // löpning med gevär snett upp
+  FLIP: [9, 10, 11],            // volt (tuckade rotationer)
+  RISE: 12, FALL: 13, LEAP: 14, LAND: 15,
+  AIRFIRE: [16, 17],
+  CFIRE: [19, 20],
+  CWALK: [21, 22, 23],          // hukad förflyttning
 };
 
 // Fiende: Renegade Grunt (assets/grunt.png, 6 använda kolumner per rad,
@@ -223,20 +225,21 @@ canvas.addEventListener('touchend', updateTouches, { passive: false });
 canvas.addEventListener('touchcancel', updateTouches, { passive: false });
 
 // ---- Tillgångar -----------------------------------------------------------
-const sheet = new Image();
-sheet.src = 'assets/commando.png';
+const pAim = new Image();
+pAim.src = 'assets/player-aim.png';
+const pMove = new Image();
+pMove.src = 'assets/player-move.png';
 const gruntSheet = new Image();
 gruntSheet.src = 'assets/grunt.png';
 const heavySheet = new Image();
 heavySheet.src = 'assets/heavy.png';
 const heliSheet = new Image();
 heliSheet.src = 'assets/heli.png';
-const aimsSheet = new Image();
-aimsSheet.src = 'assets/commando-aims.png';
-sheet.onload = () => {
+pMove.onload = () => {
   buildTerrain();
   buildParallax();
 };
+const ready = img => img.complete && img.naturalWidth;
 
 function drawFrame(img, idx, x, y, flip, fw = FW, fh = FH, cols = COLS) {
   // x,y = fötternas mittpunkt i världen (ritas i skärmkoordinater av anroparen)
@@ -393,6 +396,13 @@ const QUIPS = [
 function spawnQuip(x, y) {
   game.quips.push({ text: QUIPS[game.quipIdx++ % QUIPS.length], x, y, t: 0 });
 }
+// central kill-räknare — ALLA kills (grunts, heavies, drönare, boss)
+// räknas och triggar en one-liner varannan
+function addKill(points) {
+  game.kills++;
+  game.score += points;
+  if (game.kills % 2 === 0) spawnQuip(game.player.x, game.player.y - 62);
+}
 
 // ---- Speltillstånd ----------------------------------------------------------
 const game = {};
@@ -452,7 +462,7 @@ function makePlayer(x, y) {
     fireT: 0, flashT: 0,
     hp: 5, maxHp: 5, inv: 0,
     spreadT: 0, shieldT: 0,
-    aimUp: false, deathT: 0,
+    aimMode: 'fwd', deathT: 0,
     animT: 0,
   };
 }
@@ -518,11 +528,11 @@ const GRAV = 1500;
 
 function updatePlayer(p, dt) {
   const acc = p.grounded ? 2000 : 1400;
-  const maxV = 215;
-  p.crouch = p.grounded && inDown() && !inLeft() && !inRight();
+  p.crouch = p.grounded && inDown();
+  const maxV = p.crouch ? 80 : 215; // hukad gång är långsam men möjlig
 
-  if (inLeft() && !p.crouch)  { p.vx -= acc * dt; p.facing = -1; }
-  else if (inRight() && !p.crouch) { p.vx += acc * dt; p.facing = 1; }
+  if (inLeft())  { p.vx -= acc * dt; p.facing = -1; }
+  else if (inRight()) { p.vx += acc * dt; p.facing = 1; }
   else p.vx *= Math.pow(p.grounded ? 0.0006 : 0.02, dt);
   p.vx = Math.max(-maxV, Math.min(maxV, p.vx));
 
@@ -564,17 +574,23 @@ function updatePlayer(p, dt) {
   p.spreadT = Math.max(0, p.spreadT - dt);
   p.shieldT = Math.max(0, p.shieldT - dt);
 
-  // sikte: snett upp 45° (Contra-stil) — pil-upp eller spak uppåt
-  p.aimUp = inUp() && !p.crouch;
+  // sikte (Contra-schema): upp + stillastående = RAKT UPP,
+  // upp + rörelse/luft = snett upp 45°, annars rakt fram
+  const moving = Math.abs(p.vx) > 30 || inLeft() || inRight();
+  p.aimMode = 'fwd';
+  if (inUp() && !p.crouch) p.aimMode = (moving || !p.grounded) ? 'diag' : 'up';
 
-  // skjuta (nu även hukad och diagonalt)
+  // skjuta
   p.fireT -= dt; p.flashT -= dt;
   if (inFire() && p.fireT <= 0) {
     p.fireT = p.spreadT > 0 ? 0.11 : 0.13;
     p.flashT = 0.06;
     const f = p.facing;
     let mx, my, bvx, bvy;
-    if (p.aimUp) {
+    if (p.aimMode === 'up') {
+      mx = p.x + f * 5; my = p.y - 54;
+      bvx = 0; bvy = -720;
+    } else if (p.aimMode === 'diag') {
       mx = p.x + f * 16; my = p.y - 46;
       bvx = f * 510; bvy = -510;
     } else if (p.crouch) {
@@ -587,15 +603,16 @@ function updatePlayer(p, dt) {
     if (p.spreadT > 0) {
       for (const off of [-130, 0, 130]) {
         // sprid vinkelrätt mot skottriktningen
-        const px2 = p.aimUp ? off * 0.7 : 0, py2 = p.aimUp ? off * 0.7 : off;
-        game.bullets.push({ x: mx, y: my, vx: bvx + f * px2, vy: bvy + py2, life: 0.9 });
+        const nx = -bvy / 720, ny = bvx / 720;
+        game.bullets.push({ x: mx, y: my, vx: bvx + nx * off, vy: bvy + ny * off, life: 0.9 });
       }
     } else {
-      game.bullets.push({ x: mx, y: my, vx: bvx, vy: bvy + (p.aimUp ? 0 : (Math.random() - 0.5) * 26), life: 0.9 });
+      const jitter = p.aimMode === 'fwd' ? (Math.random() - 0.5) * 26 : 0;
+      game.bullets.push({ x: mx, y: my, vx: bvx, vy: bvy + jitter, life: 0.9 });
     }
-    p.vx -= f * (p.crouch ? 10 : 26); // rekyl (mindre hukad)
+    p.vx -= f * (p.crouch ? 10 : p.aimMode === 'up' ? 0 : 26); // rekyl
     SFX.shoot();
-    spawnFlash(mx + f * 4, my - (p.aimUp ? 4 : 0), f);
+    spawnFlash(mx + f * 4, my - (p.aimMode !== 'fwd' ? 4 : 0), f);
     spawnShell(p.x - f * 4, my - 4, -f);
   }
 
@@ -768,7 +785,7 @@ function updateBoss(b, dt, p) {
     if (b.y > 9 * TILE) { // marken
       for (let i = 0; i < 4; i++) killBoom(b.x + (Math.random() - 0.5) * 130, b.y + (Math.random() - 0.5) * 40);
       game.shake = 14;
-      game.score += 1000; game.kills++;
+      addKill(1000);
       game.bossDead = true;
       game.boss = null;
       game.choppaT = 3.5; // "GET TO THE CHOPPA!"
@@ -919,7 +936,7 @@ function updateBullets(dt, p) {
         b.life = 0; h.hp--; h.hitT = 0.1;
         spawnSparks(b.x, b.y, 6, '#ff8866');
         if (h.hp <= 0) {
-          game.kills++; game.score += 250;
+          addKill(250);
           h.dieT = 0;
           SFX.edie();
           game.shake = Math.max(game.shake, 4);
@@ -937,7 +954,7 @@ function updateBullets(dt, p) {
       if (!d.dead && Math.hypot(b.x - d.x, b.y - d.y) < 14 && b.life > 0) {
         b.life = 0; d.hp--; d.hitT = 0.1;
         spawnSparks(b.x, b.y, 6, '#8be9fd');
-        if (d.hp <= 0) { d.dead = true; killBoom(d.x, d.y); }
+        if (d.hp <= 0) { d.dead = true; killBoom(d.x, d.y); addKill(150); }
       }
     }
   }
@@ -955,12 +972,11 @@ function updateBullets(dt, p) {
   game.ebullets = game.ebullets.filter(b => b.life > 0);
 }
 function killEnemy(e) {
-  game.kills++; game.score += 100;
+  addKill(100);
   e.dieT = 0;
   SFX.edie();
   game.shake = Math.max(game.shake, 3);
   spawnSparks(e.x, e.y - 30, 10, '#a3232b'); // träffreaktionen sköter resten
-  if (game.kills % 3 === 0) spawnQuip(game.player.x, game.player.y - 60);
 }
 function killBoom(x, y) {
   SFX.edie();
@@ -1014,32 +1030,41 @@ function updatePickups(dt, p) {
 
 // ---- Rendering ---------------------------------------------------------------
 function playerFrame(p) {
-  // returnerar [bild, frameindex] — bassheeten eller tilläggssheeten (aims)
-  const hasAims = aimsSheet.complete && aimsSheet.naturalWidth;
-  if (game.state === 'dead') return [sheet, F.TUCK];
-  if (p.crouch && hasAims) {
-    if (p.flashT > 0) return [aimsSheet, AIMS.CFIRE[Math.floor(p.animT * 20) % 2]];
-    if (inFire()) return [aimsSheet, AIMS.CAIM];
-    return [aimsSheet, AIMS.CAIM2];
+  // returnerar [bild, frameindex] — aim-sheeten eller move-sheeten
+  if (game.state === 'dead') return [pMove, PM.FLIP[0]];
+  if (p.crouch) {
+    if (Math.abs(p.vx) > 15) { // hukad gång
+      if (p.flashT > 0) return [pMove, PM.CFIRE[Math.floor(p.animT * 20) % 2]];
+      return [pMove, PM.CWALK[Math.floor(p.animT * 8) % 3]];
+    }
+    if (p.flashT > 0) return [pAim, PA.CFIRE[Math.floor(p.animT * 20) % 2]];
+    return [pAim, PA.CAIM];
   }
-  if (p.crouch) return [sheet, p.flashT > 0 ? F.KNEEL2 : F.CROUCH];
   if (!p.grounded) {
     if (p.flipT >= 0) {
-      const i = Math.floor(p.flipT * 14);
-      return [sheet, i < FLIP_FRAMES.length ? FLIP_FRAMES[i] : F.LEAP];
+      const i = Math.floor(p.flipT * 12);
+      return [pMove, i < PM.FLIP.length ? PM.FLIP[i] : PM.LEAP];
     }
-    return [sheet, p.vy < -60 ? F.RISE : F.LEAP];
+    if (p.flashT > 0) return [pMove, PM.AIRFIRE[Math.floor(p.animT * 20) % 2]];
+    return [pMove, p.vy < -60 ? PM.RISE : PM.FALL];
   }
-  if (p.landT > 0.06 && Math.abs(p.vx) < 40) return [sheet, F.LAND];
-  if (Math.abs(p.vx) > 30) return [sheet, RUN_FRAMES[Math.floor(p.animT * 14) % 8]];
-  // stående med sikte snett upp
-  if (p.aimUp && hasAims) {
-    if (p.flashT > 0) return [aimsSheet, AIMS.FIRED[Math.floor(p.animT * 18) % 3]];
-    return [aimsSheet, AIMS.AIMD];
+  if (p.landT > 0.06 && Math.abs(p.vx) < 40) return [pMove, PM.LAND];
+  if (Math.abs(p.vx) > 30) {
+    // löpning — med gevär snett upp om man siktar uppåt
+    if (p.aimMode === 'diag') return [pMove, PM.RUNUP[Math.floor(p.animT * 10) % 3]];
+    return [pMove, PM.RUN[Math.floor(p.animT * 12) % 6]];
   }
-  if (p.flashT > 0) return [sheet, F.FLASH];
-  if (inFire()) return [sheet, F.AIM];
-  return [sheet, Math.sin(p.animT * 2.4) > 0.65 ? F.RAISED : F.IDLE];
+  if (p.aimMode === 'up') {
+    if (p.flashT > 0) return [pAim, PA.FIREU[Math.floor(p.animT * 20) % 2]];
+    return [pAim, PA.AIMU];
+  }
+  if (p.aimMode === 'diag') {
+    if (p.flashT > 0) return [pAim, PA.FIRED[Math.floor(p.animT * 18) % 3]];
+    return [pAim, PA.AIMD];
+  }
+  if (p.flashT > 0) return [pAim, PA.FIREF[Math.floor(p.animT * 20) % 2]];
+  if (inFire()) return [pAim, PA.AIMF];
+  return [pAim, PA.IDLE[Math.floor(p.animT * 2) % 2]];
 }
 function heavyFrame(h) {
   if (h.hp <= 0) return HV.DEATH[Math.min(HV.DEATH.length - 1, Math.floor(h.dieT * 7))];
@@ -1174,8 +1199,9 @@ function render() {
   if (game.boss && heliSheet.complete && heliSheet.naturalWidth) {
     const b = game.boss;
     if (b.hitT > 0) ctx.globalAlpha = 0.65;
-    // helin är ritad vänstervänd — flippa åt höger; center-ankrad via +72
-    drawFrame(heliSheet, bossFrame(b), b.x, b.y + 72, b.facing > 0, BFW, BFH, BCOLS);
+    // heli-sheeten är HÖGERVÄND (nosen åt höger) — flippa när bossen
+    // tittar åt vänster så nosen pekar mot spelaren; center-ankrad via +72
+    drawFrame(heliSheet, bossFrame(b), b.x, b.y + 72, b.facing < 0, BFW, BFH, BCOLS);
     ctx.globalAlpha = 1;
     if (bossPhase2(b) && b.dieT < 0 && Math.random() < 0.3) {
       game.particles.push({ x: b.x + (Math.random() - 0.5) * 60, y: b.y - 20, vx: (Math.random() - 0.5) * 20,
@@ -1186,19 +1212,20 @@ function render() {
   // spelare
   if (game.state === 'dead') {
     // Contra-död: snurrande kropp som flyger genom luften
-    if (sheet.complete) {
+    if (ready(pMove)) {
+      const df = PM.FLIP[0];
       ctx.save();
       ctx.translate(Math.round(p.x), Math.round(p.y - 24));
       ctx.rotate((p.deathT || 0) * 9 * -p.facing);
       if (p.facing < 0) ctx.scale(-1, 1);
-      ctx.drawImage(sheet, (F.TUCK % COLS) * FW, Math.floor(F.TUCK / COLS) * FH, FW, FH, -FW / 2, -FH / 2, FW, FH);
+      ctx.drawImage(pMove, (df % PCOLS) * FW, Math.floor(df / PCOLS) * FH, FW, FH, -FW / 2, -FH / 2, FW, FH);
       ctx.restore();
     }
   } else {
     const blink = p.inv > 0 && Math.floor(game.time * 12) % 2 === 0;
-    if (!blink && sheet.complete) {
+    if (!blink && ready(pAim) && ready(pMove)) {
       const [img, fi] = playerFrame(p);
-      drawFrame(img, fi, p.x, p.y, p.facing < 0);
+      drawFrame(img, fi, p.x, p.y, p.facing < 0, FW, FH, PCOLS);
     }
   }
   // sköld-aura
@@ -1215,12 +1242,16 @@ function render() {
     }
   }
 
-  // skott
-  ctx.fillStyle = '#ffe9a0';
+  // skott — tracern roteras längs skottriktningen (även uppåtskott)
   for (const b of game.bullets) {
-    ctx.fillRect(b.x - 5, b.y - 1.5, 10, 3);
-    ctx.fillStyle = 'rgba(255,210,94,0.4)'; ctx.fillRect(b.x - 14, b.y - 1, 10, 2);
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.rotate(Math.atan2(b.vy, b.vx));
     ctx.fillStyle = '#ffe9a0';
+    ctx.fillRect(-5, -1.5, 10, 3);
+    ctx.fillStyle = 'rgba(255,210,94,0.4)';
+    ctx.fillRect(-14, -1, 10, 2);
+    ctx.restore();
   }
   ctx.fillStyle = '#ff6b5e';
   for (const b of game.ebullets) {
@@ -1247,15 +1278,17 @@ function render() {
     } else ctx.fillRect(pa.x - pa.sz / 2, pa.y - pa.sz / 2, pa.sz, pa.sz);
   }
 
-  // 80-tals one-liners som svävar upp
-  ctx.font = 'bold 11px monospace';
+  // 80-tals one-liners som svävar upp — stora och kaxiga
+  ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'center';
   for (const q of game.quips) {
-    const a = Math.max(0, Math.min(1, 2.2 - q.t));
-    ctx.fillStyle = `rgba(0,0,0,${0.6 * a})`;
-    ctx.fillText('"' + q.text + '"', q.x + 1, q.y - q.t * 18 + 1);
+    const a = Math.max(0, Math.min(1, (2.8 - q.t) / 0.8));
+    const qx = Math.max(game.camX + 110, Math.min(game.camX + W - 110, q.x));
+    const qy = q.y - q.t * 14;
+    ctx.fillStyle = `rgba(0,0,0,${0.75 * a})`;
+    ctx.fillText('"' + q.text + '"', qx + 2, qy + 2);
     ctx.fillStyle = `rgba(255,210,94,${a})`;
-    ctx.fillText('"' + q.text + '"', q.x, q.y - q.t * 18);
+    ctx.fillText('"' + q.text + '"', qx, qy);
   }
 
   ctx.restore();
@@ -1321,7 +1354,7 @@ function drawExtraction(x, y) {
     ctx.fillStyle = blink ? 'rgba(255,71,87,0.9)' : 'rgba(255,71,87,0.5)';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('LÅST — SÄKRA LUFTRUMMET', x, y - 40);
+    ctx.fillText('LOCKED — CLEAR THE AIRSPACE', x, y - 40);
     return;
   }
   // helikopter som väntar
@@ -1389,9 +1422,9 @@ function drawHUD(p) {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('ATTACKHELIKOPTER', W / 2, 45);
+    ctx.fillText('ENEMY GUNSHIP', W / 2, 45);
     if (b.state === 'enter' && Math.sin(game.time * 10) > 0) {
-      bigText('⚠ FIENDEHELIKOPTER INKOMMANDE ⚠', 80, 16, '#ff4757', '#800');
+      bigText('⚠ ENEMY GUNSHIP INBOUND ⚠', 80, 16, '#ff4757', '#800');
     }
   }
   // progress
@@ -1426,37 +1459,37 @@ function bigText(txt, y, size, col, glow) {
 function drawTitle() {
   panel(0.55);
   bigText('COMMANDO STRIKE', 120, 38, '#ffd25e', '#ff8c42');
-  bigText('RUN & GUN — 80-TALS ACTION · SEKTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
+  bigText('RUN & GUN · SECTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
   ctx.textAlign = 'right';
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.fillText('BUILD ' + BUILD, W - 8, H - 8);
-  if (sheet.complete && sheet.naturalWidth) {
-    const fi = RUN_FRAMES[Math.floor(game.time * 12) % 8];
+  if (ready(pMove)) {
+    const fi = PM.RUN[Math.floor(game.time * 12) % 6];
     ctx.save(); ctx.translate(W / 2, 235); ctx.scale(1.6, 1.6);
-    drawFrame(sheet, fi, 0, 24, false);
+    drawFrame(pMove, fi, 0, 24, false, FW, FH, PCOLS);
     ctx.restore();
   }
   if (touchUI) {
-    bigText('✛ spak: gå/sikta upp/ducka · ⤒ hopp (x2 = volt!) · ✹ skjut', 285, 11, '#dfe6ff');
+    bigText('✛ STICK: MOVE · AIM UP · CROUCH  |  ⤒ JUMP (x2 = FLIP!)  |  ✹ FIRE', 285, 11, '#dfe6ff');
   } else {
-    bigText('A/D gå · W/SPACE hopp (x2 = volt!) · ↑ sikta snett upp · S ducka · J/X/mus skjut', 285, 11, '#dfe6ff');
+    bigText('A/D MOVE · W/SPACE JUMP (x2 = FLIP!) · ↑ AIM UP · S CROUCH · J/X/MOUSE FIRE', 285, 11, '#dfe6ff');
   }
   const b = Math.sin(game.time * 5) > -0.2;
-  if (b) bigText(touchUI ? 'TRYCK FÖR ATT STARTA' : 'TRYCK ENTER FÖR ATT STARTA', 320, 15, '#5eff7a');
+  if (b) bigText(touchUI ? 'TAP TO ENGAGE' : 'PRESS ENTER TO ENGAGE', 320, 15, '#5eff7a');
   if (IS_IOS && !isStandalone()) {
-    bigText('Tips: Dela → "Lägg till på hemskärmen" = helskärm utan Safari-UI', 345, 10, '#9aa7c7');
+    bigText('Tip: Share → "Add to Home Screen" = fullscreen, no Safari UI', 345, 10, '#9aa7c7');
   }
   if (innerHeight > innerWidth) {
-    bigText('↻ VRID MOBILEN TILL LIGGANDE LÄGE', 60, 14, '#ffd25e', '#ff8c42');
+    bigText('↻ ROTATE TO LANDSCAPE, SOLDIER', 60, 14, '#ffd25e', '#ff8c42');
   }
 }
 function drawDead() {
   panel(0.55);
-  bigText('DU STUPADE', 150, 36, '#ff4757', '#800');
-  bigText('ÄVEN LEGENDER LADDAR OM', 178, 12, '#ffb0a0');
-  bigText('SCORE ' + game.score + '  ·  ' + game.kills + ' FIENDER', 205, 14, '#fff');
-  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR NYTT FÖRSÖK', 230, 14, '#ffd25e');
+  bigText("YOU'RE HISTORY", 150, 36, '#ff4757', '#800');
+  bigText('EVEN LEGENDS RELOAD.', 178, 12, '#ffb0a0');
+  bigText('SCORE ' + game.score + '  ·  ' + game.kills + ' HOSTILES DOWN', 205, 14, '#fff');
+  if (Math.sin(game.time * 5) > -0.2) bigText('PRESS ENTER/R — GET BACK IN THERE', 230, 14, '#ffd25e');
 }
 function drawWin() {
   panel(0.5);
@@ -1471,12 +1504,12 @@ function drawWin() {
         life: 0.6 + Math.random() * 0.5, col, sz: 2.5, grav: 120 });
     }
   }
-  bigText('EXTRAKTION LYCKADES!', 120, 32, '#5eff7a', '#0a4');
-  bigText('SEKTOR 1 SÄKRAD', 150, 14, '#c8ffd4');
+  bigText('EXTRACTION COMPLETE!', 120, 32, '#5eff7a', '#0a4');
+  bigText('SECTOR 1 SECURED', 150, 14, '#c8ffd4');
   bigText('MISSION ACCOMPLISHED. LET OFF SOME STEAM.', 175, 11, '#ffd25e');
   bigText('SCORE ' + game.score, 220, 22, '#ffd25e');
-  bigText('FIENDER NEDGJORDA: ' + game.kills + '   TID: ' + game.time.toFixed(1) + 's', 250, 13, '#fff');
-  if (Math.sin(game.time * 5) > -0.2) bigText('TRYCK ENTER/R FÖR ATT SPELA IGEN', 300, 13, '#5eff7a');
+  bigText('HOSTILES NEUTRALIZED: ' + game.kills + '   TIME: ' + game.time.toFixed(1) + 's', 250, 13, '#fff');
+  if (Math.sin(game.time * 5) > -0.2) bigText('PRESS ENTER/R FOR ONE MORE ROUND', 300, 13, '#5eff7a');
 }
 function drawTouchUI() {
   // knappar (hopp + eld)
@@ -1534,7 +1567,7 @@ function loop(now) {
   updateParticles(dt);
   game.choppaT = Math.max(0, game.choppaT - dt);
   for (const q of game.quips) q.t += dt;
-  game.quips = game.quips.filter(q => q.t < 2.2);
+  game.quips = game.quips.filter(q => q.t < 2.8);
 
   render();
   requestAnimationFrame(loop);

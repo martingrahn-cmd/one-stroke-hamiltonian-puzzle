@@ -1,13 +1,13 @@
 'use strict';
 // Enkel cache-first service worker så spelet funkar offline som webapp.
-const CACHE = 'commando-strike-v9';
+const CACHE = 'commando-strike-v10';
 const CORE = [
   './',
   './index.html',
   './game.js',
   './manifest.webmanifest',
-  './assets/commando.png',
-  './assets/commando-aims.png',
+  './assets/player-aim.png',
+  './assets/player-move.png',
   './assets/grunt.png',
   './assets/heavy.png',
   './assets/heli.png',
