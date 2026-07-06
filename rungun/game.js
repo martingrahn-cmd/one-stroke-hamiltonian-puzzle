@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v11'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v12'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -37,7 +37,7 @@ const PM = { // player-move.png
 };
 
 // Fiende: Renegade Grunt (assets/grunt.png, 6 använda kolumner per rad,
-// packad i samma 8-kolumners 48x64-grid). OBS: ritad vänstervänd.
+// packad i samma 8-kolumners 48x64-grid). OBS: ritad HÖGERVÄND.
 const GR = {
   IDLE: [0, 1],        // arg breathing
   FIRE: [2, 3],        // skott med mynningsflamma
@@ -1190,8 +1190,8 @@ function render() {
     if (gruntSheet.complete && gruntSheet.naturalWidth) {
       if (e.hitT > 0) ctx.globalAlpha = 0.6;
       else if (e.hp <= 0 && e.dieT > 1.8) ctx.globalAlpha = Math.max(0, 1 - (e.dieT - 1.8) / 0.8);
-      // grunten är ritad vänstervänd — flippa när den ska titta åt höger
-      drawFrame(gruntSheet, enemyFrame(e), e.x, e.y, e.facing > 0);
+      // grunt-sheeten är HÖGERVÄND — flippa när den tittar åt vänster
+      drawFrame(gruntSheet, enemyFrame(e), e.x, e.y, e.facing < 0);
       ctx.globalAlpha = 1;
     }
   }
@@ -1201,8 +1201,8 @@ function render() {
     if (heavySheet.complete && heavySheet.naturalWidth) {
       if (h.hitT > 0) ctx.globalAlpha = 0.6;
       else if (h.hp <= 0 && h.dieT > 1.8) ctx.globalAlpha = Math.max(0, 1 - (h.dieT - 1.8) / 0.8);
-      // heavy är ritad vänstervänd — flippa åt höger
-      drawFrame(heavySheet, heavyFrame(h), h.x, h.y, h.facing > 0, HFW, HFH, HCOLS);
+      // heavy-sheeten är HÖGERVÄND — flippa när den tittar åt vänster
+      drawFrame(heavySheet, heavyFrame(h), h.x, h.y, h.facing < 0, HFW, HFH, HCOLS);
       ctx.globalAlpha = 1;
     }
   }
