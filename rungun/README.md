@@ -4,19 +4,20 @@ En spelbar run & gun-prototyp byggd kring commando-spritesheeten (Grok Imagine).
 Ren HTML5 canvas + vanilla JS — inga beroenden. Öppna `index.html` via en
 webbserver (t.ex. `python3 -m http.server`) och spela.
 
-![Spritesheet](assets/commando.png)
+![Spritesheet](assets/player-move.png)
 
 ## Kontroller
 
-| Handling             | Tangent                          |
-|----------------------|----------------------------------|
-| Gå vänster/höger     | `A`/`D` eller `←`/`→`            |
-| Hoppa                | `W` eller `Space`                |
-| Dubbelhopp (volt!)   | Hoppa igen i luften              |
-| Sikta snett upp 45°  | `↑` eller `I` (Contra-schema)    |
-| Skjut                | `J`, `X` eller vänster musknapp  |
-| Ducka (+ skjut lågt) | `S` eller `↓`                    |
-| Starta om            | `R`                              |
+| Handling                  | Tangent                          |
+|---------------------------|----------------------------------|
+| Gå vänster/höger          | `A`/`D` eller `←`/`→`            |
+| Hoppa                     | `W` eller `Space`                |
+| Dubbelhopp (volt!)        | Hoppa igen i luften              |
+| Sikta RAKT UPP            | `↑`/`I` stillastående            |
+| Sikta snett upp 45°       | `↑`/`I` under löpning/i luften   |
+| Skjut                     | `J`, `X` eller vänster musknapp  |
+| Ducka / hukad gång + eld  | `S` eller `↓` (+ `A`/`D`)        |
+| Starta om                 | `R`                              |
 
 Touchkontroller på mobil: **analog styrspak** på vänstra skärmhalvan (spaken
 föds där tummen landar — dra i sidled för att gå, uppåt för att sikta snett
@@ -49,8 +50,12 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
 - **Pickups**: medkits (+1 HP) och stjärnor (+50 poäng).
 - **Power-ups**: Triple Shot (spridskott i 12 s) och Shield (osårbarhets-aura
   i 8 s) — utplacerade på strategiska ställen längs banan, med HUD-timers.
-- **Riktat sikte**: skjut snett upp 45° (stående) och hukad — frames från
-  tilläggssheeten `assets/commando-aims.png`, palettmappad mot originalet.
+- **Riktat sikte i alla lägen**: rakt upp (stående), snett upp 45° (löpning/
+  luft, med egen runcykel) och hukad — inklusive hukad gång. All spelar-art
+  från de nya player-sheetsen.
+- **80-tals one-liners**: varannan kill svävar ett actioncitat upp
+  ("I'll be back.", "Yippee ki yay!"...), och "GET TO THE CHOPPA!" när
+  bossen störtar. All speltext på engelska med 80-tals-flavor.
 - **Contra-död**: spelaren flyger bakåt av dödsträffen, snurrar och faller
   genom världen — helt proceduriell, ingen döds-art behövs.
 - **Känsla**: coyote time, hoppbuffert, variabel hopphöjd, rekyl, skärmskak,
@@ -76,7 +81,10 @@ delar ihopvuxna blobbar och paketerar om allt till en jämn 8×3-sheet
 
 - `index.html` — skal + canvas
 - `game.js` — hela spelet (motor, fysik, AI, rendering, ljud, UI)
-- `assets/commando.png` — spelarens spritesheet (ompaketerad, med alfa)
+- `assets/player-aim.png` — spelarens sikte/eld (6×4: idle, fram, RAKT UPP,
+  diagonal, hukad — alla med mynningsflammor)
+- `assets/player-move.png` — spelarens rörelse (6×4: runcykel, diagonal-löpning,
+  volt, hopp/fall, luft-eld, hukad gång)
 - `assets/grunt.png` — fiendens spritesheet (Renegade Grunt: idle 0–1,
   skott 2–3, sikte 4–5, gång 8–13, death 16–21; ritad vänstervänd)
 - `assets/heavy.png` — bazooka-fienden (64×64-frames, 6 kolumner: idle 0–5,
