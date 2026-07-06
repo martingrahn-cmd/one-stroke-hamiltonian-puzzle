@@ -34,9 +34,20 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
 
 ## Innehåll
 
-- **Sektor 1: Jungle Extraction** — en handbyggd bana (~200 tiles) med
-  plattformar, lådor, spikfällor, stup och en extraktionszon med väntande
-  helikopter i slutet.
+- **Två banor** som spelas i följd (hp och poäng bärs över):
+  - **Sektor 1: Jungle Extraction** — solnedgångsdjungel, plattformar, lådor,
+    spikfällor, stup och en extraktionszon med attackhelikopter-boss.
+  - **Sektor 2: Steelworks Night Shift** — nattligt stålverk (fabrikssiluetter,
+    måne, stålgolv med varningsränder, smält-metall-gropar, containrar och
+    maskinväggar) bevakat av robotar.
+- **Robotfiender (Sektor 2)** med riktiga patrull-tillståndsmaskiner:
+  - **Sentry Walker** — tvåbent patrullrobot som *går → stannar → skannar
+    (sensorhuvudet sveper med synlig scanner-kon) → vänder/fortsätter*; blir
+    röd och skjuter laser-bursts när den upptäcker dig.
+  - **Golvturret** — vilande tills du närmar dig, fäller då upp pjäsen och
+    spårar/skjuter; fälls ner igen när du lämnar.
+  - **Mecha Brute** — stampande mini-boss-mech (skärmskak per fotnedslag,
+    lobbar granater i bågar, ryker under halva HP) som vaktar extraktionen.
 - **Fiender**: patrullerande **Renegade Grunts** (egen spritesheet:
   `assets/grunt.png` — idle, gång, skott med mynningsflamma och en dramatisk
   death-sekvens som spelas när de stupar), tunga **Heavies med bazooka**
