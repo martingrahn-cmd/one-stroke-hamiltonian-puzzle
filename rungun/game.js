@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v14'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v15'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -64,10 +64,12 @@ const HV = {
   DEATH: [17, 15, 16],
 };
 
-// ---- Nivå ----------------------------------------------------------------
-// #=mark  C=låda  B=metall  ==plattform(one-way)  S=spikar  E=fiende  R=heavy(bazooka)  D=drönare
+// ---- Nivåer ----------------------------------------------------------------
+// Legend: #=golv/mark  C=container/låda  B=massiv maskin  ==galler/plattform(one-way)
+// S=fara(spik/molten)  E=grunt  R=heavy(bazooka)  D=drönare
+// W=sentry walker  T=golvturret  X=mecha brute
 // M=medkit  *=stjärna  P=spelarstart  F=extraktion
-const MAP_SRC = [
+const LEVEL1_MAP = [
 '                                                                                                                                                                                                        ',
 '                                                                                                                                                                                                        ',
 '                                                                                                         *                                                                                              ',
@@ -82,10 +84,32 @@ const MAP_SRC = [
 '####################################### S ### S #####        ######          ######      #####   ######         #########        ##### ### ####       ####################SSS#########################  ',
 '########################################################     ######          ######      #####   ######         #########        ##############       ################################################  ',
 ];
-const MAPW = Math.max(...MAP_SRC.map(r => r.length));
-const MAP = MAP_SRC.map(r => r.padEnd(MAPW, ' '));
-const MAPH = MAP.length;
-const LEVEL_W = MAPW * TILE, LEVEL_H = MAPH * TILE;
+const LEVEL2_MAP = [
+'                                                                                                                                                                                ',
+'                                                                                                                                                                                ',
+'                                                  *                                                                                                                             ',
+'                                                       D                            *                                                 *                                         ',
+'                                    T                                           ==========  D                                       T   T *             D                       ',
+'                                ==========                    T                                                 T               ============                                    ',
+'                                                            ======                                            ======                                                            ',
+'       M                                        CCCC                M                           CCCCCCCC                      M                                                 ',
+'                                                CCCC        BBBBBB                              CCCCCCCC      BBBBBB                                                            ',
+'   P      W      W    * SSSS  *   W             CCCCW     W BBBBBB    W             W         W CCCCCCCC    W BBBBBB  SS*S  W                         W       X     * * X    F  ',
+'############################################     #########################     ###############################################################     #############################',
+'############################################SSSSS#########################SSSSS###############################################################SSSSS#############################',
+'################################################################################################################################################################################',
+];
+const LEVELS = [
+  { map: LEVEL1_MAP, theme: 'jungle',  name: 'SECTOR 1: JUNGLE EXTRACTION',    heliBoss: true },
+  { map: LEVEL2_MAP, theme: 'foundry', name: 'SECTOR 2: STEELWORKS NIGHT SHIFT', heliBoss: false },
+];
+let MAP = [], MAPW = 0, MAPH = 0, LEVEL_W = 0, LEVEL_H = 0;
+function setMap(src) {
+  MAPW = Math.max(...src.map(r => r.length));
+  MAP = src.map(r => r.padEnd(MAPW, ' '));
+  MAPH = MAP.length;
+  LEVEL_W = MAPW * TILE; LEVEL_H = MAPH * TILE;
+}
 
 const solidAt = (tx, ty) => {
   if (tx < 0 || tx >= MAPW) return true;
@@ -130,6 +154,8 @@ const SFX = {
   shoot()   { noiseBurst(0.06, 0.10, true); blip('square', 700, 180, 0.07, 0.06); },
   eshoot()  { noiseBurst(0.05, 0.06, true); blip('square', 400, 120, 0.08, 0.04); },
   rocket()  { noiseBurst(0.3, 0.12); blip('sawtooth', 300, 60, 0.35, 0.10); },
+  ebeam()   { blip('square', 1050, 420, 0.09, 0.05); },
+  stomp()   { noiseBurst(0.12, 0.14); blip('sine', 90, 45, 0.12, 0.12); },
   alarm()   { [0, 220, 440].forEach(d => setTimeout(() => blip('square', 880, 320, 0.2, 0.11), d)); },
   bossdie() { [0, 200, 420, 700].forEach((d, i) => setTimeout(() => { noiseBurst(0.35, 0.18); blip('sawtooth', 200 - i * 30, 40, 0.4, 0.12); }, d)); },
   jump()    { blip('square', 260, 560, 0.12, 0.08); },
@@ -255,11 +281,12 @@ function drawFrame(img, idx, x, y, flip, fw = FW, fh = FH, cols = COLS) {
 
 // ---- Terräng (förrenderad) -------------------------------------------------
 let terrain = null;
-function buildTerrain() {
+function buildTerrain(theme) {
   terrain = document.createElement('canvas');
   terrain.width = LEVEL_W; terrain.height = LEVEL_H;
   const g = terrain.getContext('2d');
   const rnd = mulberry(1337);
+  if (theme === 'foundry') { buildTerrainFoundry(g, rnd); return; }
   for (let ty = 0; ty < MAPH; ty++) {
     for (let tx = 0; tx < MAPW; tx++) {
       const c = MAP[ty][tx];
@@ -320,10 +347,57 @@ function mulberry(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+// Sektor 2: stålverksgolv, containrar, galler, smält metall
+function buildTerrainFoundry(g, rnd) {
+  for (let ty = 0; ty < MAPH; ty++) {
+    for (let tx = 0; tx < MAPW; tx++) {
+      const c = MAP[ty][tx];
+      const x = tx * TILE, y = ty * TILE;
+      if (c === '#') {
+        const top = !solidAt(tx, ty - 1);
+        g.fillStyle = '#2c333d'; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = 'rgba(0,0,0,0.22)';
+        g.fillRect(x, y, 1, TILE); g.fillRect(x, y, TILE, 1); // panelfogar
+        g.fillStyle = 'rgba(120,140,165,0.10)';
+        for (let i = 0; i < 3; i++) g.fillRect(x + 5 + ((rnd() * 20) | 0), y + 5 + ((rnd() * 20) | 0), 2, 2); // nitar
+        if (top) {
+          g.fillStyle = '#3f4a58'; g.fillRect(x, y, TILE, 6);
+          g.fillStyle = '#525f70'; g.fillRect(x, y, TILE, 2);
+          // varningsränder
+          g.fillStyle = '#d8a53a';
+          for (let i = 0; i < 4; i++) g.fillRect(x + i * 8, y + 3, 4, 3);
+        }
+      } else if (c === 'B') { // massiv maskin/vägg
+        g.fillStyle = '#20262e'; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = '#333c47'; g.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+        g.strokeStyle = '#151a20'; g.lineWidth = 2; g.strokeRect(x + 3, y + 3, TILE - 6, TILE - 6);
+        g.fillStyle = '#4a94c4'; g.fillRect(x + TILE / 2 - 2, y + TILE / 2 - 2, 4, 4); // indikatorljus
+      } else if (c === 'C') { // metallcontainer
+        g.fillStyle = '#3a4b52'; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = '#4a6069'; g.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+        g.fillStyle = '#2a373c';
+        for (let i = 0; i < 3; i++) g.fillRect(x + 5 + i * 8, y + 3, 3, TILE - 6); // räfflor
+        g.strokeStyle = '#20292e'; g.lineWidth = 2; g.strokeRect(x + 2, y + 2, TILE - 4, TILE - 4);
+      } else if (c === '=') { // gallerplattform
+        g.fillStyle = '#39424e'; g.fillRect(x, y, TILE, 8);
+        g.fillStyle = '#4e5c6e'; g.fillRect(x, y, TILE, 2);
+        g.fillStyle = '#20262e';
+        for (let i = 0; i < 6; i++) g.fillRect(x + 2 + i * 5, y + 3, 2, 4); // gallerhål
+      } else if (c === 'S') { // smält metall / het fara
+        const gr = g.createLinearGradient(0, y, 0, y + TILE);
+        gr.addColorStop(0, '#ffd25e'); gr.addColorStop(0.5, '#ff7a2a'); gr.addColorStop(1, '#c8331b');
+        g.fillStyle = gr; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = 'rgba(255,240,180,0.55)';
+        for (let i = 0; i < 3; i++) g.fillRect(x + ((rnd() * 26) | 0), y + 2 + ((rnd() * 6) | 0), 4, 2); // glödfläckar
+      }
+    }
+  }
+}
 
 // ---- Parallax-bakgrund ------------------------------------------------------
 let bgFar = null, bgMid = null;
-function buildParallax() {
+function buildParallax(theme) {
+  if (theme === 'foundry') { buildParallaxFoundry(); return; }
   const rnd = mulberry(99);
   bgFar = document.createElement('canvas'); bgFar.width = 640; bgFar.height = H;
   let g = bgFar.getContext('2d');
@@ -366,6 +440,36 @@ function buildParallax() {
       g.fill();
     }
   }
+}
+// Sektor 2: fabrikssiluetter — skorstenar, tankar, gantries
+function buildParallaxFoundry() {
+  const rnd = mulberry(404);
+  bgFar = document.createElement('canvas'); bgFar.width = 640; bgFar.height = H;
+  let g = bgFar.getContext('2d');
+  g.fillStyle = '#20283c';
+  for (let i = 0; i < 7; i++) {
+    const bx = i * 95 + rnd() * 30, bw = 40 + rnd() * 50, bh = 70 + rnd() * 90;
+    g.fillRect(bx, H - bh, bw, bh);
+    if (rnd() < 0.6) { g.fillRect(bx + bw * 0.3, H - bh - 40, 12, 40); } // skorsten
+  }
+  g.fillStyle = 'rgba(120,150,200,0.18)'; // fönsterljus
+  for (let i = 0; i < 40; i++) g.fillRect(rnd() * 640, H - 20 - rnd() * 130, 3, 3);
+
+  bgMid = document.createElement('canvas'); bgMid.width = 640; bgMid.height = H;
+  g = bgMid.getContext('2d');
+  g.fillStyle = '#161d2b';
+  for (let i = 0; i < 6; i++) {
+    const bx = i * 110 + rnd() * 20, bw = 55 + rnd() * 40, bh = 100 + rnd() * 80;
+    g.fillRect(bx, H - bh, bw, bh);
+    // kyltornsform / tank
+    if (rnd() < 0.5) { g.beginPath(); g.ellipse(bx + bw / 2, H - bh, bw / 2, 14, 0, 0, Math.PI * 2); g.fill(); }
+    // rör mellan byggnader
+    g.fillStyle = '#10151f'; g.fillRect(bx, H - bh * 0.4, bw + 40, 6); g.fillStyle = '#161d2b';
+  }
+  // gantry-kran överst
+  g.fillStyle = '#0f141d';
+  g.fillRect(0, 150, 640, 5);
+  for (let i = 0; i < 10; i++) g.fillRect(i * 64, 150, 4, 22);
 }
 
 // ---- Webapp/fullskärm ------------------------------------------------------
@@ -410,10 +514,30 @@ function addKill(points) {
 const game = {};
 function startGame() {
   if (touchUI) goFullscreen();
-  game.state = 'play';
-  game.time = 0;
   game.score = 0;
   game.kills = 0;
+  game.quipIdx = Math.floor(Math.random() * 9);
+  game.hpCarry = 5;
+  loadLevel(0);
+  game.state = 'play';
+}
+
+// power-up-placeringar per bana (världskoordinater ovanför marken)
+const LEVEL_POWERUPS = [
+  [{ type: 'spread', tx: 24, ty: 10 }, { type: 'spread', tx: 100, ty: 10 }, { type: 'shield', tx: 131, ty: 10 }],
+  [{ type: 'spread', tx: 34, ty: 10 }, { type: 'shield', tx: 90, ty: 10 }, { type: 'spread', tx: 150, ty: 10 }],
+];
+
+function loadLevel(idx) {
+  const L = LEVELS[idx];
+  game.level = idx;
+  game.theme = L.theme;
+  game.hasHeliBoss = L.heliBoss;
+  setMap(L.map);
+  buildTerrain(L.theme);
+  buildParallax(L.theme);
+
+  game.time = 0;
   game.shake = 0;
   game.camX = 0; game.camY = 0;
   game.bullets = [];
@@ -424,15 +548,16 @@ function startGame() {
   game.enemies = [];
   game.heavies = [];
   game.drones = [];
-  game.msg = null; game.msgT = 0;
+  game.robots = [];
   game.boss = null;
   game.bossDead = false;
   game.quips = [];
-  game.quipIdx = Math.floor(Math.random() * 9);
   game.choppaT = 0;
+  game.levelBanner = 3;
 
   let px = 2 * TILE, py = 9 * TILE;
   game.finishX = LEVEL_W - 3 * TILE;
+  game.finishY = 9 * TILE;
   for (let ty = 0; ty < MAPH; ty++) {
     for (let tx = 0; tx < MAPW; tx++) {
       const c = MAP[ty][tx];
@@ -441,18 +566,37 @@ function startGame() {
       else if (c === 'E') game.enemies.push(makeEnemy(cx, cy));
       else if (c === 'R') game.heavies.push(makeHeavy(cx, cy));
       else if (c === 'D') game.drones.push(makeDrone(cx, cy - TILE / 2));
+      else if (c === 'W') game.robots.push(makeSentry(cx, cy));
+      else if (c === 'T') game.robots.push(makeTurret(cx, cy));
+      else if (c === 'X') game.robots.push(makeMecha(cx, cy));
       else if (c === 'M') game.pickups.push({ type: 'med', x: cx, y: cy - 10, t: Math.random() * 6 });
       else if (c === '*') game.pickups.push({ type: 'star', x: cx, y: cy - 10, t: Math.random() * 6 });
       else if (c === 'F') { game.finishX = cx; game.finishY = cy; }
     }
   }
-  // power-ups (världskoordinater: ovanför marken vid strategiska punkter)
-  game.pickups.push({ type: 'spread', x: 24 * TILE + 16, y: 10 * TILE - 22, t: 0 });
-  game.pickups.push({ type: 'spread', x: 100 * TILE + 16, y: 10 * TILE - 22, t: 2 });
-  game.pickups.push({ type: 'shield', x: 131 * TILE + 16, y: 10 * TILE - 22, t: 4 });
+  for (const pu of (LEVEL_POWERUPS[idx] || [])) {
+    game.pickups.push({ type: pu.type, x: pu.tx * TILE + 16, y: pu.ty * TILE - 22, t: 0 });
+  }
 
   game.player = makePlayer(px, py);
+  game.player.hp = game.hpCarry;
   game.safe = { x: px, y: py };
+}
+
+// extraktionsgrind: öppen när banans "boss"/vakter är rensade
+function gateOpen() {
+  if (game.hasHeliBoss && !game.bossDead) return false;
+  if (game.robots && game.robots.some(r => r.kind === 'mecha' && r.hp > 0)) return false;
+  return true;
+}
+function reachExtraction() {
+  if (game.level + 1 < LEVELS.length) {
+    game.hpCarry = game.player.hp;
+    loadLevel(game.level + 1);
+  } else {
+    game.state = 'win';
+    SFX.win();
+  }
 }
 
 function makePlayer(x, y) {
@@ -488,6 +632,271 @@ function makeHeavy(x, y) {
 }
 function makeDrone(x, y) {
   return { x, y, baseY: y, hp: 2, hitT: 0, t: Math.random() * 10, cool: 1.5 + Math.random(), dead: false };
+}
+
+// ---- Robotar (Sektor 2) ----------------------------------------------------
+function makeSentry(x, y) {
+  return {
+    kind: 'sentry', x, y, vx: 0, vy: 0, w: 22, h: 44, facing: -1, grounded: false,
+    hp: 4, hitT: 0, dieT: -1, state: 'walk', stateT: 0, walkExtra: Math.random() * 1.5,
+    scan: 0, burst: 0, burstT: 0, flashT: 0, animT: Math.random() * 10,
+  };
+}
+function makeTurret(x, y) {
+  return {
+    kind: 'turret', x, y, vx: 0, vy: 0, w: 26, h: 22, facing: -1, grounded: true,
+    hp: 5, hitT: 0, dieT: -1, deploy: 0, aim: 0, scan: 0, cool: 1, flashT: 0, animT: Math.random() * 10,
+  };
+}
+function makeMecha(x, y) {
+  return {
+    kind: 'mecha', x, y, vx: 0, vy: 0, w: 44, h: 64, facing: -1, grounded: false,
+    hp: 14, maxHp: 14, hitT: 0, dieT: -1, windup: -1, cool: 1.5 + Math.random(),
+    flashT: 0, lastStep: 0, boomT: 0, animT: Math.random() * 10,
+  };
+}
+function robotCanWalk(r, dir) {
+  const ahead = r.x + dir * (r.w / 2 + 6);
+  const gy = Math.floor((r.y + 4) / TILE);
+  const ground = solidAt(Math.floor(ahead / TILE), gy) || platformAt(Math.floor(ahead / TILE), gy);
+  const wall = solidAt(Math.floor(ahead / TILE), Math.floor((r.y - 22) / TILE));
+  return ground && !wall;
+}
+function robotBolt(x, y, tx, ty, spd, life) {
+  const dx = tx - x, dy = ty - y, d = Math.hypot(dx, dy) || 1;
+  game.ebullets.push({ x, y, vx: dx / d * spd, vy: dy / d * spd, life, col: '#7dffff' });
+  spawnFlash(x, y, dx > 0 ? 1 : -1);
+}
+
+function updateRobot(r, dt, p) {
+  if (r.kind === 'sentry') updateSentry(r, dt, p);
+  else if (r.kind === 'turret') updateTurret(r, dt, p);
+  else updateMecha(r, dt, p);
+}
+
+function updateSentry(r, dt, p) {
+  r.animT += dt; r.hitT = Math.max(0, r.hitT - dt); r.flashT = Math.max(0, r.flashT - dt);
+  if (r.hp <= 0) { r.dieT += dt; r.vx = 0; r.vy += GRAV * dt; moveBody(r, dt, true); return; }
+  const dx = p.x - r.x;
+  const visible = Math.abs(dx) < 270 && Math.abs(p.y - r.y) < 70 && game.state === 'play' && p.inv < 1.0;
+  const inFront = Math.sign(dx) === r.facing;
+
+  switch (r.state) {
+    case 'walk':
+      r.vx = robotCanWalk(r, r.facing) ? r.facing * 48 : (r.facing *= -1, 0);
+      r.stateT += dt;
+      if (visible && inFront) { r.state = 'alert'; r.stateT = 0; r.vx = 0; }
+      else if (r.stateT > 2.2 + r.walkExtra) { r.state = 'halt'; r.stateT = 0; r.vx = 0; }
+      break;
+    case 'halt':
+      r.vx = 0; r.stateT += dt;
+      if (visible && inFront) { r.state = 'alert'; r.stateT = 0; }
+      else if (r.stateT > 0.4) { r.state = 'scan'; r.stateT = 0; }
+      break;
+    case 'scan':
+      r.vx = 0; r.stateT += dt;
+      r.scan = Math.sin(r.stateT * 4.4); // sensorhuvudet sveper
+      if (visible) { r.state = 'alert'; r.stateT = 0; r.scan = 0; r.facing = dx > 0 ? 1 : -1; }
+      else if (r.stateT > 1.5) { r.scan = 0; if (Math.random() < 0.6) r.facing *= -1; r.state = 'walk'; r.stateT = 0; r.walkExtra = Math.random() * 1.5; }
+      break;
+    case 'alert':
+      r.vx = 0; r.facing = dx > 0 ? 1 : -1; r.stateT += dt;
+      if (r.stateT > 0.5) { r.state = 'fire'; r.stateT = 0; r.burst = 2; r.burstT = 0; }
+      break;
+    case 'fire':
+      r.vx = 0; r.facing = dx > 0 ? 1 : -1; r.burstT -= dt;
+      if (r.burstT <= 0 && r.burst > 0) {
+        r.burst--; r.burstT = 0.24; r.flashT = 0.09;
+        robotBolt(r.x + r.facing * 16, r.y - 30, p.x, p.y - 22, 300, 2.0); SFX.ebeam();
+      }
+      if (r.burst <= 0 && r.burstT <= 0) { r.state = visible ? 'alert' : 'walk'; r.stateT = 0; }
+      break;
+  }
+  r.vy += GRAV * dt; moveBody(r, dt, true);
+}
+
+function updateTurret(r, dt, p) {
+  r.animT += dt; r.hitT = Math.max(0, r.hitT - dt); r.flashT = Math.max(0, r.flashT - dt);
+  if (r.hp <= 0) { r.dieT += dt; return; }
+  const dx = p.x - r.x, dy = (p.y - 22) - (r.y - 16);
+  const visible = Math.abs(dx) < 250 && Math.abs(p.y - r.y) < 120 && game.state === 'play' && p.inv < 1.0;
+  r.deploy = Math.max(0, Math.min(1, r.deploy + (visible ? dt * 3 : -dt * 2)));
+  if (r.deploy > 0.9 && visible) {
+    r.aim = Math.atan2(dy, dx);
+    r.cool -= dt;
+    if (r.cool <= 0) {
+      r.cool = 1.1; r.flashT = 0.09;
+      const bx = r.x + Math.cos(r.aim) * 22, by = r.y - 16 + Math.sin(r.aim) * 22;
+      robotBolt(bx, by, p.x, p.y - 22, 330, 2.2); SFX.ebeam();
+    }
+  } else {
+    r.scan = Math.sin(r.animT * 1.6) * 0.6; // vilande radarsvep
+  }
+}
+
+function updateMecha(r, dt, p) {
+  r.animT += dt; r.hitT = Math.max(0, r.hitT - dt); r.flashT = Math.max(0, r.flashT - dt);
+  if (r.hp <= 0) {
+    r.dieT += dt; r.vx = 0; r.vy += GRAV * dt; moveBody(r, dt, true);
+    r.boomT -= dt;
+    if (r.boomT <= 0 && r.dieT < 2) {
+      r.boomT = 0.24;
+      killBoom(r.x + (Math.random() - 0.5) * 70, r.y - 30 - Math.random() * 40);
+      game.shake = Math.max(game.shake, 5);
+    }
+    return;
+  }
+  r.facing = p.x > r.x ? 1 : -1;
+  const dx = p.x - r.x;
+  const far = Math.abs(dx) > 150;
+  r.cool -= dt;
+  if (r.windup >= 0) {
+    r.vx = 0; r.windup += dt;
+    if (r.windup >= 0.7) {
+      r.windup = -1; r.cool = 1.8 + Math.random(); r.flashT = 0.22;
+      // lobbad granat i båge som når spelaren
+      const t = 0.95, g = 560;
+      game.rockets.push({ x: r.x + r.facing * 30, y: r.y - 48, vx: (p.x - r.x) / t, vy: -0.5 * g * t, grav: g, life: 2.6 });
+      SFX.rocket(); game.shake = Math.max(game.shake, 3);
+    }
+  } else if (far && game.state === 'play') {
+    r.vx = robotCanWalk(r, r.facing) ? r.facing * 40 : 0;
+    const step = Math.floor(r.animT * 3.0); // stampljud/skak per fotnedslag
+    if (step !== r.lastStep) { r.lastStep = step; if (Math.abs(r.vx) > 5) { game.shake = Math.max(game.shake, 2); SFX.stomp(); } }
+    if (r.cool <= 0) r.windup = 0;
+  } else {
+    r.vx = 0;
+    if (r.cool <= 0) r.windup = 0;
+  }
+  r.vy += GRAV * dt; moveBody(r, dt, true);
+}
+
+// ---- Robot-rendering -------------------------------------------------------
+function drawRobot(r) {
+  if (r.hp <= 0 && (r.dieT < 0 || r.dieT > 2.4)) return;
+  ctx.save();
+  if (r.hitT > 0) ctx.globalAlpha = 0.6;
+  else if (r.hp <= 0 && r.dieT > 1.6) ctx.globalAlpha = Math.max(0, 1 - (r.dieT - 1.6) / 0.8);
+  ctx.translate(Math.round(r.x), Math.round(r.y));
+  if (r.facing < 0) ctx.scale(-1, 1);
+  if (r.kind === 'sentry') drawSentry(r);
+  else if (r.kind === 'turret') drawTurret(r);
+  else drawMecha(r);
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+function eyeColor(state) {
+  return state === 'fire' ? '#ff3b3b' : state === 'alert' ? '#ffb020' : '#7dffff';
+}
+function drawSentry(r) {
+  const dead = r.hp <= 0;
+  const walking = Math.abs(r.vx) > 5 && !dead;
+  const step = walking ? Math.sin(r.animT * 11) : 0;
+  // ben (två, motrörelse)
+  ctx.fillStyle = '#232a33';
+  ctx.fillRect(-8, -13 + Math.max(0, step) * 2, 6, 13);
+  ctx.fillRect(3, -13 + Math.max(0, -step) * 2, 6, 13);
+  ctx.fillStyle = '#151a20';
+  ctx.fillRect(-9, -3, 8, 4); ctx.fillRect(2, -3, 8, 4); // fötter
+  // torso
+  ctx.fillStyle = '#3c4756';
+  ctx.fillRect(-9, -34, 19, 22);
+  ctx.fillStyle = '#4e5c6e';
+  ctx.fillRect(-9, -34, 19, 4);
+  ctx.fillStyle = '#d8a53a'; // hazard-remsa
+  ctx.fillRect(-9, -20, 19, 2);
+  ctx.fillStyle = '#20262e';
+  ctx.fillRect(-6, -30, 12, 7); // panel
+  // arm-kanon (framåt)
+  ctx.fillStyle = '#2b3038';
+  ctx.fillRect(4, -30, 18, 7);
+  ctx.fillStyle = '#4e5c6e';
+  ctx.fillRect(18, -31, 5, 9);
+  if (r.flashT > 0) { ctx.fillStyle = '#bffcff'; ctx.beginPath(); ctx.arc(24, -27, 5, 0, Math.PI * 2); ctx.fill(); }
+  // sensorhuvud (roterar med scan)
+  ctx.save();
+  ctx.translate(0, -37);
+  ctx.rotate((r.scan || 0) * 0.5);
+  ctx.fillStyle = '#454f5e';
+  ctx.fillRect(-7, -9, 14, 10);
+  ctx.fillStyle = dead ? '#555' : eyeColor(r.state);
+  ctx.fillRect(2, -6, 6, 4); // öga
+  if (!dead && (r.state === 'scan' || (r.state === 'fire' || r.state === 'alert'))) {
+    // scanner-kon
+    const col = r.state === 'scan' ? 'rgba(125,255,255,0.16)' : 'rgba(255,80,60,0.14)';
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(6, -3); ctx.lineTo(70, -22); ctx.lineTo(70, 16); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function drawTurret(r) {
+  const d = r.deploy;
+  const dead = r.hp <= 0;
+  // sockel
+  ctx.fillStyle = '#2b323d';
+  ctx.fillRect(-13, -12, 26, 12);
+  ctx.fillStyle = '#3c4756';
+  ctx.fillRect(-13, -12, 26, 3);
+  ctx.fillStyle = '#d8a53a';
+  ctx.fillRect(-13, -4, 26, 2);
+  // torn reser sig
+  const rise = d * 12;
+  ctx.fillStyle = '#454f5e';
+  ctx.fillRect(-8, -12 - rise, 16, 4 + rise);
+  // pjäshuvud
+  ctx.save();
+  ctx.translate(0, -12 - rise);
+  ctx.fillStyle = '#3c4756';
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dead ? '#555' : (d > 0.9 ? eyeColor('alert') : eyeColor('scan'));
+  ctx.beginPath(); ctx.arc(0, -1, 3, 0, Math.PI * 2); ctx.fill();
+  if (d > 0.5) {
+    ctx.rotate(d > 0.9 ? r.aim : (r.scan || 0));
+    ctx.fillStyle = '#20262e';
+    ctx.fillRect(4, -3, 18 * d, 6);
+    ctx.fillStyle = '#4e5c6e';
+    ctx.fillRect(20 * d, -4, 4, 8);
+    if (r.flashT > 0) { ctx.fillStyle = '#bffcff'; ctx.beginPath(); ctx.arc(24 * d, 0, 5, 0, Math.PI * 2); ctx.fill(); }
+  }
+  ctx.restore();
+}
+function drawMecha(r) {
+  const dead = r.hp <= 0;
+  const walking = Math.abs(r.vx) > 5 && !dead;
+  const bob = walking ? Math.abs(Math.sin(r.animT * 3.0)) * 3 : 0;
+  const step = walking ? Math.sin(r.animT * 3.0) : 0;
+  // ben (kraftiga, stampande)
+  ctx.fillStyle = '#2b323d';
+  ctx.fillRect(-18, -22 + Math.max(0, step) * 4, 13, 22);
+  ctx.fillRect(6, -22 + Math.max(0, -step) * 4, 13, 22);
+  ctx.fillStyle = '#151a20';
+  ctx.fillRect(-20, -4, 16, 5); ctx.fillRect(5, -4, 16, 5); // hydrauliska fötter
+  // höft
+  ctx.fillStyle = '#3c4756';
+  ctx.fillRect(-16, -30, 32, 10);
+  // torso/cockpit
+  ctx.fillStyle = '#454f5e';
+  ctx.fillRect(-18, -58 - bob, 34, 30);
+  ctx.fillStyle = '#5a6a7e';
+  ctx.fillRect(-18, -58 - bob, 34, 5);
+  ctx.fillStyle = '#d8a53a';
+  ctx.fillRect(-18, -34 - bob, 34, 3); // hazard
+  // cockpit-öga
+  ctx.fillStyle = dead ? '#555' : (r.windup >= 0 ? '#ff3b3b' : '#ff8020');
+  ctx.fillRect(2, -52 - bob, 12, 6);
+  ctx.fillStyle = '#20262e';
+  ctx.fillRect(-14, -52 - bob, 12, 12); // panel
+  // axelmonterad granatkastare
+  ctx.fillStyle = '#2b3038';
+  ctx.fillRect(0, -60 - bob, 24, 9);
+  ctx.fillStyle = '#4e5c6e';
+  ctx.fillRect(20, -61 - bob, 6, 11);
+  if (r.flashT > 0) { ctx.fillStyle = '#ffd25e'; ctx.beginPath(); ctx.arc(28, -56 - bob, 6, 0, Math.PI * 2); ctx.fill(); }
+  // skaderök när < halva HP
+  if (!dead && r.hp <= r.maxHp / 2 && Math.random() < 0.25) {
+    game.particles.push({ x: r.x + (Math.random() - 0.5) * 30, y: r.y - 55, vx: (Math.random() - 0.5) * 15,
+      vy: -30 - Math.random() * 25, life: 0.6, col: 'rgba(60,60,64,0.8)', sz: 4, grav: -30 });
+  }
 }
 
 // ---- Fysik ------------------------------------------------------------------
@@ -626,17 +1035,16 @@ function updatePlayer(p, dt) {
     if (game.state === 'play') { p.x = game.safe.x; p.y = game.safe.y; p.vx = p.vy = 0; }
   }
 
-  // boss-trigger
-  if (!game.boss && !game.bossDead && p.x > BOSS_TRIGGER_X) {
+  // boss-trigger (endast heli-banan)
+  if (game.hasHeliBoss && !game.boss && !game.bossDead && p.x > BOSS_TRIGGER_X) {
     game.boss = makeBoss();
     SFX.alarm();
     game.shake = Math.max(game.shake, 4);
   }
 
-  // mål (låst tills bossen är nedskjuten)
-  if (game.bossDead && Math.abs(p.x - game.finishX) < 26 && Math.abs(p.y - game.finishY) < 60) {
-    game.state = 'win';
-    SFX.win();
+  // mål (låst tills banans vakter är rensade) → nästa bana eller vinst
+  if (gateOpen() && Math.abs(p.x - game.finishX) < 26 && Math.abs(p.y - game.finishY) < 60) {
+    reachExtraction();
   }
 
   p.animT += dt;
@@ -974,6 +1382,20 @@ function updateBullets(dt, p) {
         if (d.hp <= 0) { d.dead = true; killBoom(d.x, d.y); addKill(150); }
       }
     }
+    for (const r of game.robots) {
+      const top = r.kind === 'turret' ? r.y - r.h : r.y - r.h;
+      if (r.hp > 0 && r.dieT < 0 && b.life > 0 &&
+          Math.abs(b.x - r.x) < r.w / 2 + 5 && b.y > top && b.y < r.y + 4) {
+        b.life = 0; r.hp--; r.hitT = 0.1;
+        spawnSparks(b.x, b.y, 6, '#8be9fd');
+        if (r.hp <= 0) {
+          const pts = r.kind === 'mecha' ? 400 : r.kind === 'turret' ? 120 : 150;
+          addKill(pts); r.dieT = 0;
+          if (r.kind === 'mecha') { r.boomT = 0; game.shake = 9; }
+          else killBoom(r.x, r.y - r.h / 2);
+        }
+      }
+    }
   }
   game.bullets = game.bullets.filter(b => b.life > 0);
 
@@ -1113,21 +1535,33 @@ function render() {
   game.shake *= 0.88;
   const cx = Math.round(game.camX + shX), cy = Math.round(game.camY + shY);
 
-  // himmel
+  // himmel (tema-beroende)
+  const foundry = game.theme === 'foundry';
   const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, '#2b1a4e');
-  sky.addColorStop(0.45, '#8a3a63');
-  sky.addColorStop(0.75, '#e2703a');
-  sky.addColorStop(1, '#f5a94e');
+  if (foundry) {
+    sky.addColorStop(0, '#0b1020'); sky.addColorStop(0.5, '#161d33');
+    sky.addColorStop(0.8, '#3a2740'); sky.addColorStop(1, '#5a2f36');
+  } else {
+    sky.addColorStop(0, '#2b1a4e'); sky.addColorStop(0.45, '#8a3a63');
+    sky.addColorStop(0.75, '#e2703a'); sky.addColorStop(1, '#f5a94e');
+  }
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, W, H);
-  // sol
-  ctx.fillStyle = '#ffd98a';
-  ctx.beginPath(); ctx.arc(W * 0.72 - cx * 0.03, 150 - cy * 0.02, 42, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = 'rgba(255,217,138,0.25)';
-  ctx.beginPath(); ctx.arc(W * 0.72 - cx * 0.03, 150 - cy * 0.02, 58, 0, Math.PI * 2); ctx.fill();
+  // sol / måne
+  const orbX = W * 0.72 - cx * 0.03, orbY = 130 - cy * 0.02;
+  if (foundry) {
+    ctx.fillStyle = '#c8d0e0';
+    ctx.beginPath(); ctx.arc(orbX, orbY, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0b1020'; // månkratrar / skugga
+    ctx.beginPath(); ctx.arc(orbX + 10, orbY - 6, 30, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = '#ffd98a';
+    ctx.beginPath(); ctx.arc(orbX, orbY + 20, 42, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,217,138,0.25)';
+    ctx.beginPath(); ctx.arc(orbX, orbY + 20, 58, 0, Math.PI * 2); ctx.fill();
+  }
   // stjärnor uppe
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillStyle = foundry ? 'rgba(200,210,235,0.6)' : 'rgba(255,255,255,0.5)';
   for (let i = 0; i < 24; i++) {
     const sx = (i * 97 + 31) % W, sy = (i * 53) % 90;
     ctx.fillRect((sx - cx * 0.01 % W + W) % W, sy, 1.5, 1.5);
@@ -1212,6 +1646,8 @@ function render() {
     if (d.dead) continue;
     drawDrone(d);
   }
+  // robotar
+  for (const r of game.robots) drawRobot(r);
   // boss
   if (game.boss && heliSheet.complete && heliSheet.naturalWidth) {
     const b = game.boss;
@@ -1270,9 +1706,16 @@ function render() {
     ctx.fillRect(-14, -1, 10, 2);
     ctx.restore();
   }
-  ctx.fillStyle = '#ff6b5e';
   for (const b of game.ebullets) {
-    ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
+    if (b.col) { // robotlaser: glödande streck längs banan
+      ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(Math.atan2(b.vy, b.vx));
+      ctx.fillStyle = 'rgba(125,255,255,0.35)'; ctx.fillRect(-9, -2, 18, 4);
+      ctx.fillStyle = b.col; ctx.fillRect(-5, -1.5, 11, 3);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = '#ff6b5e';
+      ctx.beginPath(); ctx.arc(b.x, b.y, 3, 0, Math.PI * 2); ctx.fill();
+    }
   }
   // raketer
   for (const r of game.rockets) {
@@ -1362,16 +1805,17 @@ function drawExtraction(x, y) {
   for (let i = 0; i < 5; i++) ctx.fillRect(x - 36 + i * 16, y - 4, 8, 2);
   // fyrbåk
   const blink = Math.sin(game.time * 6) > 0;
+  const open = gateOpen();
   ctx.fillStyle = '#555f70';
   ctx.fillRect(x - 34, y - 26, 4, 22); ctx.fillRect(x + 30, y - 26, 4, 22);
-  ctx.fillStyle = blink ? (game.bossDead ? '#5eff7a' : '#ff4757') : (game.bossDead ? '#1d7a30' : '#7a1d1d');
+  ctx.fillStyle = blink ? (open ? '#5eff7a' : '#ff4757') : (open ? '#1d7a30' : '#7a1d1d');
   ctx.fillRect(x - 35, y - 31, 6, 6); ctx.fillRect(x + 29, y - 31, 6, 6);
-  if (!game.bossDead) {
-    // låst tills luftrummet är säkrat — räddningshelin vågar inte landa
+  if (!open) {
+    // låst tills banans vakter är rensade
     ctx.fillStyle = blink ? 'rgba(255,71,87,0.9)' : 'rgba(255,71,87,0.5)';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('LOCKED — CLEAR THE AIRSPACE', x, y - 40);
+    ctx.fillText(game.hasHeliBoss ? 'LOCKED — CLEAR THE AIRSPACE' : 'LOCKED — DESTROY THE MECHS', x, y - 40);
     return;
   }
   // helikopter som väntar
@@ -1452,6 +1896,28 @@ function drawHUD(p) {
   ctx.fillRect(W / 2 - 80, 12, 160 * prog, 6);
   ctx.fillStyle = '#fff';
   ctx.fillRect(W / 2 - 80 + 160 * prog - 1, 10, 3, 10);
+
+  // mecha-vakter kvar (Sektor 2) — mini-bossbar
+  if (!game.hasHeliBoss) {
+    const mechs = game.robots.filter(r => r.kind === 'mecha');
+    const alive = mechs.filter(r => r.hp > 0);
+    const near = alive.some(r => Math.abs(r.x - game.player.x) < 320);
+    if (near) {
+      const hp = alive.reduce((s, r) => s + r.hp, 0), max = mechs.length * 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(W / 2 - 110, 26, 220, 10);
+      ctx.fillStyle = '#ff8c42'; ctx.fillRect(W / 2 - 108, 28, 216 * Math.max(0, hp / max), 6);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('MECHA BRUTE', W / 2, 45);
+    }
+  }
+
+  // nivåbanner vid start
+  if (game.levelBanner > 0) {
+    const a = Math.min(1, game.levelBanner);
+    ctx.save(); ctx.globalAlpha = a;
+    bigText(LEVELS[game.level].name, 150, 22, game.theme === 'foundry' ? '#7dffff' : '#ffd25e', '#000');
+    ctx.restore();
+  }
 }
 function heart(g, x, y, s) {
   g.beginPath();
@@ -1476,7 +1942,7 @@ function bigText(txt, y, size, col, glow) {
 function drawTitle() {
   panel(0.55);
   bigText('COMMANDO STRIKE', 120, 38, '#ffd25e', '#ff8c42');
-  bigText('RUN & GUN · SECTOR 1: JUNGLE EXTRACTION', 150, 11, '#5ce8f5');
+  bigText('RUN & GUN · JUNGLE → STEELWORKS · 2 SECTORS', 150, 11, '#5ce8f5');
   ctx.textAlign = 'right';
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
@@ -1521,8 +1987,8 @@ function drawWin() {
         life: 0.6 + Math.random() * 0.5, col, sz: 2.5, grav: 120 });
     }
   }
-  bigText('EXTRACTION COMPLETE!', 120, 32, '#5eff7a', '#0a4');
-  bigText('SECTOR 1 SECURED', 150, 14, '#c8ffd4');
+  bigText('MISSION COMPLETE!', 120, 32, '#5eff7a', '#0a4');
+  bigText('ALL SECTORS SECURED', 150, 14, '#c8ffd4');
   bigText('MISSION ACCOMPLISHED. LET OFF SOME STEAM.', 175, 11, '#ffd25e');
   bigText('SCORE ' + game.score, 220, 22, '#ffd25e');
   bigText('HOSTILES NEUTRALIZED: ' + game.kills + '   TIME: ' + game.time.toFixed(1) + 's', 250, 13, '#fff');
@@ -1568,6 +2034,7 @@ function loop(now) {
     updatePlayer(game.player, dt);
     for (const e of game.enemies) updateEnemy(e, dt, game.player);
     for (const h of game.heavies) updateHeavy(h, dt, game.player);
+    for (const r of game.robots) updateRobot(r, dt, game.player);
     if (game.boss) updateBoss(game.boss, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
@@ -1583,6 +2050,7 @@ function loop(now) {
   }
   updateParticles(dt);
   game.choppaT = Math.max(0, game.choppaT - dt);
+  if (game.levelBanner > 0) game.levelBanner -= dt;
   for (const q of game.quips) q.t += dt;
   game.quips = game.quips.filter(q => q.t < 2.8);
 
