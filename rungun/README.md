@@ -13,6 +13,14 @@ en sektor-knapp, eller tryck `Enter` för Sektor 1. Dör du startar `R`/`Enter`
 om **samma sektor** (inte alltid Sektor 1), så du slipper spela om bana 1 för
 att testa bana 2.
 
+## Dev-läge (starta hos bossen)
+
+För att testa bossar utan att spela igenom hela banan: tryck **`B`** på
+titel-/döds-skärmen så teleporteras du direkt till den valda sektorns boss
+(på trygg mark, med Triple Shot). Titeln har även en **⚙ DEV: BOSS**-knapp
+uppe till vänster (för mobil utan tangentbord) — slå på den så startar
+sektorval-knapparna/`1`/`2` direkt vid bossen. Läget sparas mellan besök.
+
 ## Kontroller
 
 | Handling                  | Tangent                          |
