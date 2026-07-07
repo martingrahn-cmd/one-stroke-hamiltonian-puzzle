@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v23'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v24'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -24,7 +24,9 @@ const PA = { // player-aim.png
   AIMF: 2, FIREF: [3, 4],       // rakt fram
   AIMU: 6, FIREU: [7, 8],       // RAKT UPP
   AIMD: 18, FIRED: [9, 11, 10], // snett upp 45°
-  CAIM: 23, CFIRE: [22, 16],    // hukad
+  // hukad: 19–21 är djupa hukar (23 är egentligen en stående bredställning),
+  // 22 är huk-eld. Gick tidigare på 23 → såg ut som stående, inte huk.
+  CAIM: 20, CWALK: [19, 20, 21], CFIRE: [22, 20],
 };
 const PM = { // player-move.png
   RUN: [0, 1, 2, 3, 4, 5],
@@ -1189,6 +1191,17 @@ function updatePlayer(p, dt) {
     reachExtraction();
   }
 
+  // löpdamm — små stötpuffar vid fotnedslag så löpningen får fäste i marken
+  if (p.grounded && !p.crouch && p.flipT < 0 && Math.abs(p.vx) > 70) {
+    p.stepT = (p.stepT || 0) + dt;
+    if (p.stepT >= 0.25) { // två steg per stride-cykel
+      p.stepT = 0;
+      const fx = p.x - p.facing * 8;
+      game.particles.push({ x: fx, y: p.y - 1, vx: -p.facing * (20 + Math.random() * 20),
+        vy: -18 - Math.random() * 14, life: 0.32, col: 'rgba(180,180,190,0.55)', sz: 3, grav: 120 });
+    }
+  } else p.stepT = 0;
+
   p.animT += dt;
 }
 function spikeNear(p) {
@@ -1626,11 +1639,10 @@ function playerFrame(p) {
   // returnerar [bild, frameindex] — aim-sheeten eller move-sheeten
   if (game.state === 'dead') return [pMove, PM.FLIP[0]];
   if (p.crouch) {
-    if (Math.abs(p.vx) > 15) { // hukad gång
-      if (p.flashT > 0) return [pMove, PM.CFIRE[Math.floor(p.animT * 20) % 2]];
-      return [pMove, PM.CWALK[Math.floor(p.animT * 8) % 3]];
-    }
+    // allt hukat ritas från aim-sheeten (djupa huk-frames 19–22) så att
+    // ducka faktiskt ser låg ut i stället för en stående bredställning
     if (p.flashT > 0) return [pAim, PA.CFIRE[Math.floor(p.animT * 20) % 2]];
+    if (Math.abs(p.vx) > 15) return [pAim, PA.CWALK[Math.floor(p.animT * 7) % 3]]; // hukad gång
     return [pAim, PA.CAIM];
   }
   if (!p.grounded) {
@@ -1832,7 +1844,14 @@ function render() {
     const blink = p.inv > 0 && Math.floor(game.time * 12) % 2 === 0;
     if (!blink && ready(pAim) && ready(pMove)) {
       const [img, fi] = playerFrame(p);
-      drawFrame(img, fi, p.x, p.y, p.facing < 0, PFW, PFH, PCOLS);
+      // löp-bob: kroppen höjs/sänks två gånger per steg så löpningen läser
+      // som en riktig löpning i stället för att glida fram (skridsko-känslan).
+      // Groks frames rör knappt benen — det här säljer stegen.
+      let yOff = 0;
+      const running = p.grounded && p.flipT < 0 && Math.abs(p.vx) > 30;
+      if (running && !p.crouch) yOff = -Math.abs(Math.sin(p.animT * 12.57)) * 3.2;
+      else if (running && p.crouch) yOff = -Math.abs(Math.sin(p.animT * 8)) * 1.4;
+      drawFrame(img, fi, p.x, p.y + yOff, p.facing < 0, PFW, PFH, PCOLS);
     }
   }
   // sköld-aura
