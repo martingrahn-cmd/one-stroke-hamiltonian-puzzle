@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v17'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v18'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -723,6 +723,27 @@ function robotBolt(x, y, tx, ty, spd, life) {
   game.ebullets.push({ x, y, vx: dx / d * spd, vy: dy / d * spd, life, col: '#7dffff' });
   spawnFlash(x, y, dx > 0 ? 1 : -1);
 }
+// robotdöd: spränger i bitar — blixt, metallspill, gnistor, rök
+function robotExplode(r, big) {
+  const cx = r.x, cy = r.y - r.h / 2;
+  SFX.edie();
+  game.shake = Math.max(game.shake, big ? 9 : 4.5);
+  // vit blixt
+  game.particles.push({ x: cx, y: cy, vx: 0, vy: 0, life: 0.13, col: '#eafcff', sz: big ? 24 : 15, grav: 0, flash: true });
+  // metallspill
+  const shards = ['#9fb0c5', '#5a6a7e', '#d8a53a', '#7dffff'];
+  const n = big ? 24 : 15;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * (big ? 230 : 175);
+    game.particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 45,
+      life: 0.5 + Math.random() * 0.5, col: shards[i % 4], sz: 2 + Math.random() * 3, grav: 540 });
+  }
+  // rökpuffar
+  for (let i = 0; i < (big ? 9 : 5); i++) {
+    game.particles.push({ x: cx + (Math.random() - 0.5) * 22, y: cy, vx: (Math.random() - 0.5) * 34, vy: -30 - Math.random() * 45,
+      life: 0.6 + Math.random() * 0.5, col: 'rgba(70,72,80,0.8)', sz: 4 + Math.random() * 3, grav: -30 });
+  }
+}
 
 function updateRobot(r, dt, p) {
   if (r.kind === 'sentry') updateSentry(r, dt, p);
@@ -829,7 +850,9 @@ function updateMecha(r, dt, p) {
 
 // ---- Robot-rendering -------------------------------------------------------
 function drawRobot(r) {
-  if (r.hp <= 0 && (r.dieT < 0 || r.dieT > 2.4)) return;
+  // sentry/turret: sprängs i bitar direkt (explosionspartiklarna ÄR döden)
+  if (r.hp <= 0 && r.kind !== 'mecha') return;
+  if (r.hp <= 0 && (r.dieT < 0 || r.dieT > 2.4)) return; // mecha: kollaps + uttoning
   ctx.save();
   if (r.hitT > 0) ctx.globalAlpha = 0.6;
   else if (r.hp <= 0 && r.dieT > 1.6) ctx.globalAlpha = Math.max(0, 1 - (r.dieT - 1.6) / 0.8);
@@ -1447,8 +1470,8 @@ function updateBullets(dt, p) {
         if (r.hp <= 0) {
           const pts = r.kind === 'mecha' ? 400 : r.kind === 'turret' ? 120 : 150;
           addKill(pts); r.dieT = 0;
-          if (r.kind === 'mecha') { r.boomT = 0; game.shake = 9; }
-          else killBoom(r.x, r.y - r.h / 2);
+          robotExplode(r, r.kind === 'mecha');
+          if (r.kind === 'mecha') r.boomT = 0.2; // följs av kedje-explosioner
         }
       }
     }
@@ -2106,6 +2129,8 @@ function loop(now) {
     for (const e of game.enemies) updateEnemy(e, dt, game.player);
     for (const h of game.heavies) updateHeavy(h, dt, game.player);
     for (const r of game.robots) updateRobot(r, dt, game.player);
+    // ta bort sprängda sentry/turret; mechas stannar (kollaps + grind-koll)
+    game.robots = game.robots.filter(r => r.kind === 'mecha' || r.hp > 0 || r.dieT < 0.06);
     if (game.boss) updateBoss(game.boss, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
