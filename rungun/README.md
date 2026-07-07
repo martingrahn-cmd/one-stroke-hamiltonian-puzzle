@@ -60,8 +60,10 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
     fortsätter*; ögat växlar cyan→rött, reser kanonen och skjuter energi-
     bursts när den upptäcker dig, och spelar en egen explosions-/spillr-
     dödssekvens när den skjuts ner.
-  - **Golvturret** — vilande tills du närmar dig, fäller då upp pjäsen och
-    spårar/skjuter; fälls ner igen när du lämnar.
+  - **Golvturret** — nedfälld och vilande tills du närmar dig (egen spritesheet
+    `assets/robot-turret.png`, 6×3): *fäller upp pjäsen → spårar/skjuter energi-
+    bursts med mynningsflamma → fälls ner igen* när du lämnar, och spelar en
+    egen eldklots-/spillrsekvens när den skjuts sönder.
   - **Mecha Brute** — stampande mini-boss-mech (skärmskak per fotnedslag,
     lobbar granater i bågar, ryker under halva HP) som vaktar extraktionen.
 - **Fiender**: patrullerande **Renegade Grunts** (egen spritesheet:
@@ -120,4 +122,7 @@ delar ihopvuxna blobbar och paketerar om allt till en jämn 8×3-sheet
 - `assets/heavy.png` — bazooka-fienden (64×64-frames, 6 kolumner: idle 0–5,
   sikte 6–8, eld 9–10, gång 12–14, död 15–17; vänstervänd — eldframesen
   var högervända i källbilden och är flippade vid extraktion)
+- `assets/robot-sentry.png` — Sektor 2-patrullrobot (8×4-frames)
+- `assets/robot-turret.png` — Sektor 2-golvturret (Floor Turret, 6×3, 64×64-frames:
+  deploy 0–5, aktiv/aim 6–8, eld m. mynningsflamma 9–11, destruktion 12–17)
 - `tools/extract_sprites.py` — sprite-extraktion från originalbilderna
