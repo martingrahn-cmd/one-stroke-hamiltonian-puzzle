@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v18'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v19'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -723,6 +723,12 @@ function robotBolt(x, y, tx, ty, spd, life) {
   game.ebullets.push({ x, y, vx: dx / d * spd, vy: dy / d * spd, life, col: '#7dffff' });
   spawnFlash(x, y, dx > 0 ? 1 : -1);
 }
+// robotar skjuter bara när de faktiskt syns på skärmen (annars "osynliga
+// skyttar" bakom kameran) — game.camX är förra framens smoothade kamera
+function onScreen(x, margin) {
+  margin = margin || 30;
+  return x > game.camX + margin && x < game.camX + W - margin;
+}
 // robotdöd: spränger i bitar — blixt, metallspill, gnistor, rök
 function robotExplode(r, big) {
   const cx = r.x, cy = r.y - r.h / 2;
@@ -755,7 +761,7 @@ function updateSentry(r, dt, p) {
   r.animT += dt; r.hitT = Math.max(0, r.hitT - dt); r.flashT = Math.max(0, r.flashT - dt);
   if (r.hp <= 0) { r.dieT += dt; r.vx = 0; r.vy += GRAV * dt; moveBody(r, dt, true); return; }
   const dx = p.x - r.x;
-  const visible = Math.abs(dx) < 270 && Math.abs(p.y - r.y) < 70 && game.state === 'play' && p.inv < 1.0;
+  const visible = Math.abs(dx) < 250 && Math.abs(p.y - r.y) < 70 && game.state === 'play' && p.inv < 1.0 && onScreen(r.x);
   const inFront = Math.sign(dx) === r.facing;
 
   switch (r.state) {
@@ -784,7 +790,7 @@ function updateSentry(r, dt, p) {
       r.vx = 0; r.facing = dx > 0 ? 1 : -1; r.burstT -= dt;
       if (r.burstT <= 0 && r.burst > 0) {
         r.burst--; r.burstT = 0.24; r.flashT = 0.09;
-        robotBolt(r.x + r.facing * 16, r.y - 30, p.x, p.y - 22, 300, 2.0); SFX.ebeam();
+        robotBolt(r.x + r.facing * 16, r.y - 30, p.x, p.y - 22, 320, 1.1); SFX.ebeam();
       }
       if (r.burst <= 0 && r.burstT <= 0) { r.state = visible ? 'alert' : 'walk'; r.stateT = 0; }
       break;
@@ -796,7 +802,7 @@ function updateTurret(r, dt, p) {
   r.animT += dt; r.hitT = Math.max(0, r.hitT - dt); r.flashT = Math.max(0, r.flashT - dt);
   if (r.hp <= 0) { r.dieT += dt; return; }
   const dx = p.x - r.x, dy = (p.y - 22) - (r.y - 16);
-  const visible = Math.abs(dx) < 250 && Math.abs(p.y - r.y) < 120 && game.state === 'play' && p.inv < 1.0;
+  const visible = Math.abs(dx) < 240 && Math.abs(p.y - r.y) < 120 && game.state === 'play' && p.inv < 1.0 && onScreen(r.x);
   r.deploy = Math.max(0, Math.min(1, r.deploy + (visible ? dt * 3 : -dt * 2)));
   if (r.deploy > 0.9 && visible) {
     r.aim = Math.atan2(dy, dx);
@@ -804,7 +810,7 @@ function updateTurret(r, dt, p) {
     if (r.cool <= 0) {
       r.cool = 1.1; r.flashT = 0.09;
       const bx = r.x + Math.cos(r.aim) * 22, by = r.y - 16 + Math.sin(r.aim) * 22;
-      robotBolt(bx, by, p.x, p.y - 22, 330, 2.2); SFX.ebeam();
+      robotBolt(bx, by, p.x, p.y - 22, 340, 1.2); SFX.ebeam();
     }
   } else {
     r.scan = Math.sin(r.animT * 1.6) * 0.6; // vilande radarsvep
