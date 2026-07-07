@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v21'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v22'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -298,6 +298,8 @@ const heliSheet = new Image();
 heliSheet.src = 'assets/heli.png';
 const sentrySheet = new Image(); // Sektor 2: Sentry Walker (8x4, 64x72/frame)
 sentrySheet.src = 'assets/robot-sentry.png';
+const turretSheet = new Image(); // Sektor 2: Floor Turret (6x3, 64x64/frame)
+turretSheet.src = 'assets/robot-turret.png';
 pMove.onload = () => {
   buildTerrain();
   buildParallax();
@@ -709,7 +711,7 @@ function makeSentry(x, y) {
 }
 function makeTurret(x, y) {
   return {
-    kind: 'turret', x, y, vx: 0, vy: 0, w: 26, h: 22, facing: -1, grounded: true,
+    kind: 'turret', x, y, vx: 0, vy: 0, w: 30, h: 34, facing: 1, grounded: true,
     hp: 5, hitT: 0, dieT: -1, deploy: 0, aim: 0, scan: 0, cool: 1, flashT: 0, animT: Math.random() * 10,
   };
 }
@@ -812,6 +814,7 @@ function updateTurret(r, dt, p) {
   if (r.hp <= 0) { r.dieT += dt; return; }
   const dx = p.x - r.x, dy = (p.y - 22) - (r.y - 16);
   const visible = Math.abs(dx) < 240 && Math.abs(p.y - r.y) < 120 && game.state === 'play' && p.inv < 1.0 && onScreen(r.x);
+  if (visible) r.facing = dx > 0 ? 1 : -1; // vänd pjäsen mot spelaren
   r.deploy = Math.max(0, Math.min(1, r.deploy + (visible ? dt * 3 : -dt * 2)));
   if (r.deploy > 0.9 && visible) {
     r.aim = Math.atan2(dy, dx);
@@ -879,10 +882,16 @@ function sentryFrame(r) {
   if (Math.abs(r.vx) > 5) return Math.floor(r.animT * 11) % 8; // gångcykel
   return 8 + Math.floor(r.animT * 4) % 5; // idle/scan (cyan öga)
 }
+const TURRET_READY = () => turretSheet.complete && turretSheet.naturalWidth;
+// Floor Turret-frames i robot-turret.png (6 kol): deploy 0-5, aktiv 6-8,
+// eld 9-11, död 12-17
+function turretFrame(r) {
+  if (r.hp <= 0) return 12 + Math.min(5, Math.floor(r.dieT * 7)); // dödssekvens ~7fps
+  if (r.flashT > 0) return 9 + Math.floor(r.animT * 18) % 3;      // eld m. mynningsflamma
+  if (r.deploy > 0.92) return 6 + Math.floor(r.animT * 3) % 2;    // aktiv/aim
+  return Math.min(5, Math.floor(r.deploy * 6));                   // deploy/retract
+}
 function drawRobot(r) {
-  // turret: sprängs i bitar direkt (procedurell explosion). sentry & mecha
-  // har egna dödsanimationer och ritas klart.
-  if (r.hp <= 0 && r.kind === 'turret') return;
   if (r.kind === 'sentry' && SENTRY_READY()) {
     if (r.hp <= 0 && r.dieT > 0.85) return;
     ctx.save();
@@ -893,6 +902,18 @@ function drawRobot(r) {
     ctx.globalAlpha = 1;
     return;
   }
+  if (r.kind === 'turret' && TURRET_READY()) {
+    if (r.hp <= 0 && r.dieT > 0.9) return;
+    ctx.save();
+    if (r.hitT > 0) ctx.globalAlpha = 0.6;
+    // turret-sheeten är HÖGERVÄND — flippa vid facing < 0
+    drawFrame(turretSheet, turretFrame(r), r.x, r.y + 2, r.facing < 0, 64, 64, 6);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
+  // turret utan sprite: sprängs i bitar direkt (procedurell explosion)
+  if (r.hp <= 0 && r.kind === 'turret') return;
   if (r.hp <= 0 && r.kind !== 'mecha') return;
   if (r.hp <= 0 && (r.dieT < 0 || r.dieT > 2.4)) return; // mecha: kollaps + uttoning
   ctx.save();
@@ -1517,7 +1538,8 @@ function updateBullets(dt, p) {
         if (r.hp <= 0) {
           const pts = r.kind === 'mecha' ? 400 : r.kind === 'turret' ? 120 : 150;
           addKill(pts); r.dieT = 0;
-          if (r.kind === 'sentry' && SENTRY_READY()) {
+          const spriteDeath = (r.kind === 'sentry' && SENTRY_READY()) || (r.kind === 'turret' && TURRET_READY());
+          if (spriteDeath) {
             // spriten har egen explosions-/spillrsekvens — bara skak + ljud + gnistor
             SFX.edie(); game.shake = Math.max(game.shake, 5);
             spawnSparks(r.x, r.y - r.h / 2, 8, '#ffd25e');
@@ -2196,7 +2218,8 @@ function loop(now) {
     // behåll: mechas alltid, levande robotar, döende sentries genom sin
     // sprite-dödsanimation (~0.85s); sprängda turrets tas bort direkt
     game.robots = game.robots.filter(r => r.kind === 'mecha' || r.hp > 0
-      || (r.kind === 'sentry' && r.dieT < 0.9) || (r.kind === 'turret' && r.dieT < 0.06));
+      || (r.kind === 'sentry' && r.dieT < 0.9)
+      || (r.kind === 'turret' && r.dieT < (TURRET_READY() ? 0.95 : 0.06)));
     if (game.boss) updateBoss(game.boss, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
