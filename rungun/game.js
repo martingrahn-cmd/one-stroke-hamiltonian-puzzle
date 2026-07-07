@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v25'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v26'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -184,7 +184,8 @@ addEventListener('keydown', e => {
   if (!e.repeat && e.code === 'Space') pendingJump = true;
   // banval på meny/döds/vinst-skärm: siffertangent hoppar direkt till sektorn
   if (game.state !== 'play') {
-    if (e.code === 'Digit1' || e.code === 'Numpad1') startGame(0);
+    if (e.code === 'KeyB') startGame(defaultStartIdx(), true); // dev: rakt till bossen
+    else if (e.code === 'Digit1' || e.code === 'Numpad1') startGame(0);
     else if (e.code === 'Digit2' || e.code === 'Numpad2') startGame(1);
     else if (['Enter', 'Space', 'KeyR'].includes(e.code)) startGame(defaultStartIdx());
   } else if (e.code === 'KeyR') startGame(game.level); // starta om nuvarande sektor
@@ -206,6 +207,7 @@ canvas.addEventListener('mousedown', e => {
   if (game.state !== 'play') {
     const pt = canvasPos(e);
     if (game.state === 'title' && hitReload(pt)) { window.forceReload && window.forceReload(); return; }
+    if (game.state === 'title' && hitDev(pt)) { toggleDev(); return; }
     let idx = defaultStartIdx();
     for (const b of MENU_BTN) if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
     startGame(idx);
@@ -240,6 +242,18 @@ const RELOAD_BTN = { x: W - 60, y: 22, w: 96, h: 22 };
 function hitReload(pt) {
   return Math.abs(pt.x - RELOAD_BTN.x) < RELOAD_BTN.w / 2 && Math.abs(pt.y - RELOAD_BTN.y) < RELOAD_BTN.h / 2 + 8;
 }
+// dev-läge: hoppa direkt till sektorns boss. Knapp uppe till vänster + B-tangent.
+// Toggeln sparas så man slipper klicka varje gång på mobil.
+const DEV_BTN = { x: 66, y: 22, w: 116, h: 22 };
+let devBoss = false;
+try { devBoss = localStorage.getItem('cs_devboss') === '1'; } catch (e) {}
+function hitDev(pt) {
+  return Math.abs(pt.x - DEV_BTN.x) < DEV_BTN.w / 2 && Math.abs(pt.y - DEV_BTN.y) < DEV_BTN.h / 2 + 8;
+}
+function toggleDev() {
+  devBoss = !devBoss;
+  try { localStorage.setItem('cs_devboss', devBoss ? '1' : '0'); } catch (e) {}
+}
 function updateTouches(e) {
   e.preventDefault();
   touchUI = true;
@@ -273,6 +287,7 @@ function updateTouches(e) {
   if (game.state !== 'play' && e.type === 'touchstart' && e.touches.length) {
     const pt = canvasPos(e.touches[0]);
     if (game.state === 'title' && hitReload(pt)) { window.forceReload && window.forceReload(); return; }
+    if (game.state === 'title' && hitDev(pt)) { toggleDev(); return; }
     let idx = defaultStartIdx(); // titel/vinst → sektor 1, död → samma sektor
     for (const b of MENU_BTN) {
       if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
@@ -580,7 +595,7 @@ function addKill(points) {
 
 // ---- Speltillstånd ----------------------------------------------------------
 const game = {};
-function startGame(idx) {
+function startGame(idx, atBoss) {
   idx = Math.max(0, Math.min(LEVELS.length - 1, idx | 0));
   if (touchUI) goFullscreen();
   game.score = 0;
@@ -588,7 +603,36 @@ function startGame(idx) {
   game.lastQuip = -1;
   game.hpCarry = 5;
   loadLevel(idx);
+  if (atBoss === undefined) atBoss = devBoss;
+  if (atBoss) jumpToBoss();
   game.state = 'play';
+}
+// hitta en trygg golv-kolumn (solid mark, ingen spik/smält metall) i ett spann
+function safeGroundX(startTx, dir, minTx, maxTx) {
+  for (let tx = startTx; tx >= minTx && tx <= maxTx; tx += dir) {
+    let ty = 9;
+    while (ty < MAPH && !solidAt(tx, ty) && !spikeAt(tx, ty)) ty++;
+    if (ty < MAPH && solidAt(tx, ty) && !spikeAt(tx, ty) && !spikeAt(tx, ty - 1)) return { tx, ty };
+  }
+  return null;
+}
+// dev: teleportera spelaren till bossen och rensa vägen dit
+function jumpToBoss() {
+  const p = game.player;
+  game.enemies = []; game.heavies = []; game.drones = []; game.robots = [];
+  let bx = game.finishX - 6 * TILE, by = game.finishY;
+  if (game.hasColossus || game.hasHeliBoss) {
+    // strax bortom boss-triggern (nästa frame föder bossen), på trygg mark
+    const trigTx = Math.floor((game.hasColossus ? game.finishX - 30 * TILE : BOSS_TRIGGER_X) / TILE) + 1;
+    const maxTx = Math.floor(game.finishX / TILE) - 3;
+    const g = safeGroundX(trigTx, 1, trigTx, maxTx) || safeGroundX(maxTx, -1, trigTx, maxTx);
+    if (g) { bx = g.tx * TILE + TILE / 2; by = g.ty * TILE; }
+  }
+  p.x = bx; p.y = by; p.vx = p.vy = 0; p.grounded = true;
+  game.safe = { x: bx, y: by };
+  p.spreadT = 30;                 // testeldkraft så bossen går att fälla snabbt
+  game.levelBanner = 0;           // hoppa över nivåbannern
+  game.camX = Math.max(0, Math.min(LEVEL_W - W, bx - W / 2)); // snäpp kameran dit
 }
 
 // power-up-placeringar per bana (världskoordinater ovanför marken)
@@ -2405,6 +2449,15 @@ function drawTitle() {
   ctx.fillStyle = upd ? '#5eff7a' : '#c8d0e0';
   ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
   ctx.fillText(upd ? '⟳ UPDATE!' : '⟳ RELOAD', rb.x, rb.y + 4);
+  // DEV-knapp (uppe till vänster): hoppa direkt till bossen
+  const db = DEV_BTN;
+  ctx.fillStyle = devBoss ? 'rgba(255,140,66,0.28)' : 'rgba(255,255,255,0.10)';
+  ctx.fillRect(db.x - db.w / 2, db.y - db.h / 2, db.w, db.h);
+  ctx.strokeStyle = devBoss ? '#ff8c42' : 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2;
+  ctx.strokeRect(db.x - db.w / 2, db.y - db.h / 2, db.w, db.h);
+  ctx.fillStyle = devBoss ? '#ff8c42' : '#c8d0e0';
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(devBoss ? '⚙ DEV: BOSS ✓' : '⚙ DEV: BOSS', db.x, db.y + 4);
   if (ready(pMove)) {
     const fi = PM.RUN[Math.floor(game.time * 12) % 6];
     ctx.save(); ctx.translate(W / 2, 235); ctx.scale(1.6, 1.6);
@@ -2429,7 +2482,8 @@ function drawTitle() {
     ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
     ctx.fillText(bt.label, bt.x, bt.y + 4);
   }
-  bigText(touchUI ? 'TAP A SECTOR TO ENGAGE' : 'PRESS 1 OR 2 (OR ENTER)', 352, 9, '#9aa7c7');
+  bigText(touchUI ? 'TAP A SECTOR TO ENGAGE  ·  ⚙ DEV = START AT BOSS'
+    : 'PRESS 1 OR 2 (OR ENTER)  ·  B / ⚙ DEV = START AT BOSS', 352, 9, '#9aa7c7');
   if (IS_IOS && !isStandalone()) {
     bigText('Tip: Share → "Add to Home Screen" = fullscreen, no Safari UI', 340, 9, '#7a8398');
   }
