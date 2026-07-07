@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v19'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v20'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -289,6 +289,8 @@ const heavySheet = new Image();
 heavySheet.src = 'assets/heavy.png';
 const heliSheet = new Image();
 heliSheet.src = 'assets/heli.png';
+const sentrySheet = new Image(); // Sektor 2: Sentry Walker (8x4, 64x72/frame)
+sentrySheet.src = 'assets/robot-sentry.png';
 pMove.onload = () => {
   buildTerrain();
   buildParallax();
@@ -693,7 +695,7 @@ function makeDrone(x, y) {
 // ---- Robotar (Sektor 2) ----------------------------------------------------
 function makeSentry(x, y) {
   return {
-    kind: 'sentry', x, y, vx: 0, vy: 0, w: 22, h: 44, facing: -1, grounded: false,
+    kind: 'sentry', x, y, vx: 0, vy: 0, w: 26, h: 52, facing: -1, grounded: false,
     hp: 4, hitT: 0, dieT: -1, state: 'walk', stateT: 0, walkExtra: Math.random() * 1.5,
     scan: 0, burst: 0, burstT: 0, flashT: 0, animT: Math.random() * 10,
   };
@@ -855,8 +857,30 @@ function updateMecha(r, dt, p) {
 }
 
 // ---- Robot-rendering -------------------------------------------------------
+const SENTRY_READY = () => sentrySheet.complete && sentrySheet.naturalWidth;
+// Sentry Walker-frames i robot-sentry.png (8 kol): gång 0-7, idle/scan 8-12
+// (cyan öga) 13-15 (rött), sikta 16-20, eld m. stråle 21-23, död 24-31
+function sentryFrame(r) {
+  if (r.hp <= 0) return 24 + Math.min(7, Math.floor(r.dieT * 10)); // dödssekvens ~10fps
+  if (r.state === 'fire') return 21 + Math.floor(r.animT * 16) % 3;
+  if (r.state === 'alert') return 16 + Math.min(4, Math.floor(r.stateT * 10)); // reser kanonen
+  if (Math.abs(r.vx) > 5) return Math.floor(r.animT * 11) % 8; // gångcykel
+  return 8 + Math.floor(r.animT * 4) % 5; // idle/scan (cyan öga)
+}
 function drawRobot(r) {
-  // sentry/turret: sprängs i bitar direkt (explosionspartiklarna ÄR döden)
+  // turret: sprängs i bitar direkt (procedurell explosion). sentry & mecha
+  // har egna dödsanimationer och ritas klart.
+  if (r.hp <= 0 && r.kind === 'turret') return;
+  if (r.kind === 'sentry' && SENTRY_READY()) {
+    if (r.hp <= 0 && r.dieT > 0.85) return;
+    ctx.save();
+    if (r.hitT > 0) ctx.globalAlpha = 0.6;
+    // sentry-sheeten är HÖGERVÄND — flippa vid facing < 0
+    drawFrame(sentrySheet, sentryFrame(r), r.x, r.y + 2, r.facing < 0, 64, 72, 8);
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    return;
+  }
   if (r.hp <= 0 && r.kind !== 'mecha') return;
   if (r.hp <= 0 && (r.dieT < 0 || r.dieT > 2.4)) return; // mecha: kollaps + uttoning
   ctx.save();
@@ -1476,8 +1500,14 @@ function updateBullets(dt, p) {
         if (r.hp <= 0) {
           const pts = r.kind === 'mecha' ? 400 : r.kind === 'turret' ? 120 : 150;
           addKill(pts); r.dieT = 0;
-          robotExplode(r, r.kind === 'mecha');
-          if (r.kind === 'mecha') r.boomT = 0.2; // följs av kedje-explosioner
+          if (r.kind === 'sentry' && SENTRY_READY()) {
+            // spriten har egen explosions-/spillrsekvens — bara skak + ljud + gnistor
+            SFX.edie(); game.shake = Math.max(game.shake, 5);
+            spawnSparks(r.x, r.y - r.h / 2, 8, '#ffd25e');
+          } else {
+            robotExplode(r, r.kind === 'mecha');
+            if (r.kind === 'mecha') r.boomT = 0.2; // följs av kedje-explosioner
+          }
         }
       }
     }
@@ -2136,7 +2166,10 @@ function loop(now) {
     for (const h of game.heavies) updateHeavy(h, dt, game.player);
     for (const r of game.robots) updateRobot(r, dt, game.player);
     // ta bort sprängda sentry/turret; mechas stannar (kollaps + grind-koll)
-    game.robots = game.robots.filter(r => r.kind === 'mecha' || r.hp > 0 || r.dieT < 0.06);
+    // behåll: mechas alltid, levande robotar, döende sentries genom sin
+    // sprite-dödsanimation (~0.85s); sprängda turrets tas bort direkt
+    game.robots = game.robots.filter(r => r.kind === 'mecha' || r.hp > 0
+      || (r.kind === 'sentry' && r.dieT < 0.9) || (r.kind === 'turret' && r.dieT < 0.06));
     if (game.boss) updateBoss(game.boss, dt, game.player);
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);

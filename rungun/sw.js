@@ -1,6 +1,6 @@
 'use strict';
 // Enkel cache-first service worker så spelet funkar offline som webapp.
-const CACHE = 'commando-strike-v19';
+const CACHE = 'commando-strike-v20';
 const CORE = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const CORE = [
   './assets/grunt.png',
   './assets/heavy.png',
   './assets/heli.png',
+  './assets/robot-sentry.png',
   './assets/icon-192.png',
   './assets/icon-512.png',
   './assets/apple-touch-icon.png',

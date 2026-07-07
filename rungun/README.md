@@ -48,9 +48,11 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
     måne, stålgolv med varningsränder, smält-metall-gropar, containrar och
     maskinväggar) bevakat av robotar.
 - **Robotfiender (Sektor 2)** med riktiga patrull-tillståndsmaskiner:
-  - **Sentry Walker** — tvåbent patrullrobot som *går → stannar → skannar
-    (sensorhuvudet sveper med synlig scanner-kon) → vänder/fortsätter*; blir
-    röd och skjuter laser-bursts när den upptäcker dig.
+  - **Sentry Walker** — tvåbent patrullrobot (egen spritesheet
+    `assets/robot-sentry.png`, 8×4) som *går → stannar → skannar → vänder/
+    fortsätter*; ögat växlar cyan→rött, reser kanonen och skjuter energi-
+    bursts när den upptäcker dig, och spelar en egen explosions-/spillr-
+    dödssekvens när den skjuts ner.
   - **Golvturret** — vilande tills du närmar dig, fäller då upp pjäsen och
     spårar/skjuter; fälls ner igen när du lämnar.
   - **Mecha Brute** — stampande mini-boss-mech (skärmskak per fotnedslag,
