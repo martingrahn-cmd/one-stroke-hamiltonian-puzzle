@@ -30,6 +30,13 @@ Touchkontroller på mobil: **analog styrspak** på vänstra skärmhalvan (spaken
 föds där tummen landar — dra i sidled för att gå, uppåt för att sikta snett
 upp, nedåt för att ducka) samt `⤒` hopp och `✹` skjut till höger.
 
+## Uppdatera på mobil
+
+Titelskärmen har en **⟳ RELOAD**-knapp uppe till höger. Den nollar cachen och
+hämtar senaste versionen — praktiskt i webappen där man inte kan hård-ladda om.
+Hittar service workern automatiskt en ny version glöder knappen grönt som
+**⟳ UPDATE!**. Versionsnumret står nere till höger (BUILD vNN).
+
 ## Webapp (PWA)
 
 Spelet är installerbart som webapp med manifest + service worker (offline-stöd):
