@@ -64,8 +64,15 @@ Spelet är installerbart som webapp med manifest + service worker (offline-stöd
     `assets/robot-turret.png`, 6×3): *fäller upp pjäsen → spårar/skjuter energi-
     bursts med mynningsflamma → fälls ner igen* när du lämnar, och spelar en
     egen eldklots-/spillrsekvens när den skjuts sönder.
-  - **Mecha Brute** — stampande mini-boss-mech (skärmskak per fotnedslag,
-    lobbar granater i bågar, ryker under halva HP) som vaktar extraktionen.
+- **Boss (Sektor 2): Foundry Colossus** — en gigantisk tvåbent krigsmech
+  (helt proceduriell) som vaknar när du närmar dig extraktionen och låser den
+  tills den skrotats. Tre telegraferade anfall som lär ut spelets verktyg:
+  **STOMP** (slår ner → marktryckvågor åt båda håll som du *hoppar* över),
+  **LASER-SVEP** (laddar med rött öga → horisontell stråle i brösthöjd som du
+  *duckar* under) och **ARTILLERI** (lobbar granater i bågar mot din position
+  → *spring undan* nedslagen). Fas 2 under 50 % HP: rage-glöd, snabbare anfall
+  och en bröstkanon-barrage. Störtar och rasar isär med kedje-explosioner när
+  den besegras (+1000 poäng).
 - **Fiender**: patrullerande **Renegade Grunts** (egen spritesheet:
   `assets/grunt.png` — idle, gång, skott med mynningsflamma och en dramatisk
   death-sekvens som spelas när de stupar), tunga **Heavies med bazooka**

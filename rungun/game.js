@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v24'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v25'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -96,14 +96,14 @@ const LEVEL2_MAP = [
 '                                                            ======                                            ======                                                            ',
 '       M                                        CCCC                M                           CCCCCCCC                      M                                                 ',
 '                                                CCCC        BBBBBB                              CCCCCCCC      BBBBBB                                                            ',
-'   P          *         SSSS  *   W             CCCCW     W BBBBBB    W             W         W CCCCCCCC    W BBBBBB  SS*S  W                         W       X     * * X    F  ',
+'   P          *         SSSS  *   W             CCCCW     W BBBBBB    W             W         W CCCCCCCC    W BBBBBB  SS*S  W                         W             * *      F  ',
 '############################################     #########################     ###############################################################     #############################',
 '############################################SSSSS#########################SSSSS###############################################################SSSSS#############################',
 '################################################################################################################################################################################',
 ];
 const LEVELS = [
   { map: LEVEL1_MAP, theme: 'jungle',  name: 'SECTOR 1: JUNGLE EXTRACTION',    heliBoss: true },
-  { map: LEVEL2_MAP, theme: 'foundry', name: 'SECTOR 2: STEELWORKS NIGHT SHIFT', heliBoss: false },
+  { map: LEVEL2_MAP, theme: 'foundry', name: 'SECTOR 2: STEELWORKS NIGHT SHIFT', heliBoss: false, colossus: true },
 ];
 let MAP = [], MAPW = 0, MAPH = 0, LEVEL_W = 0, LEVEL_H = 0;
 function setMap(src) {
@@ -602,6 +602,7 @@ function loadLevel(idx) {
   game.level = idx;
   game.theme = L.theme;
   game.hasHeliBoss = L.heliBoss;
+  game.hasColossus = !!L.colossus;
   setMap(L.map);
   buildTerrain(L.theme);
   buildParallax(L.theme);
@@ -620,6 +621,8 @@ function loadLevel(idx) {
   game.robots = [];
   game.boss = null;
   game.bossDead = false;
+  game.shocks = [];   // Colossus mark-shockwaves
+  game.beam = null;   // Colossus sveplaser
   game.quips = [];
   game.choppaT = 0;
   game.levelBanner = 3;
@@ -655,6 +658,7 @@ function loadLevel(idx) {
 // extraktionsgrind: öppen när banans "boss"/vakter är rensade
 function gateOpen() {
   if (game.hasHeliBoss && !game.bossDead) return false;
+  if (game.hasColossus && !game.bossDead) return false;
   if (game.robots && game.robots.some(r => r.kind === 'mecha' && r.hp > 0)) return false;
   return true;
 }
@@ -1185,6 +1189,12 @@ function updatePlayer(p, dt) {
     SFX.alarm();
     game.shake = Math.max(game.shake, 4);
   }
+  // Sektor 2-boss: Foundry Colossus vaknar när man närmar sig extraktionen
+  if (game.hasColossus && !game.boss && !game.bossDead && p.x > game.finishX - 30 * TILE) {
+    game.boss = makeColossus();
+    SFX.alarm();
+    game.shake = Math.max(game.shake, 6);
+  }
 
   // mål (låst tills banans vakter är rensade) → nästa bana eller vinst
   if (gateOpen() && Math.abs(p.x - game.finishX) < 26 && Math.abs(p.y - game.finishY) < 60) {
@@ -1349,6 +1359,7 @@ function makeBoss() {
 const bossPhase2 = b => b.hp <= b.maxHp * 0.5;
 
 function updateBoss(b, dt, p) {
+  if (b.kind === 'colossus') return updateColossus(b, dt, p);
   b.animT += dt; b.t += dt;
   b.hitT = Math.max(0, b.hitT - dt);
   b.flashT = Math.max(0, b.flashT - dt);
@@ -1453,6 +1464,258 @@ function bossFrame(b) {
   return BOSS_F.HOVER[Math.floor(b.animT * 10) % 4];
 }
 
+// ---- Sektor 2-boss: Foundry Colossus (procedurell markmech) -----------------
+// Marktung tvåbent krigsmech. Tre telegraferade anfall som lär ut spelets
+// verktyg: STOMP (hoppa över tryckvågen), LASER-SVEP (ducka under strålen),
+// ARTILLERI (spring undan nedslagen). Fas 2 under 50% HP: snabbare + rage.
+function makeColossus() {
+  const gy = game.finishY; // marklinjen (= spelarens fot-y)
+  return {
+    kind: 'colossus',
+    x: game.finishX + 220, y: gy,
+    hp: 46, maxHp: 46,
+    hitW: 42, hitH: 54, cyOff: 56,   // träffbox: halv-vidd/höjd + torso-center över fötterna
+    state: 'enter', t: 0, animT: 0,
+    cool: 1.8, flashT: 0, hitT: 0, dieT: -1,
+    facing: -1, legT: 0, lastStep: 0, boomT: 0, lift: 0, salvo: 0, tilt: 0,
+  };
+}
+
+function updateColossus(b, dt, p) {
+  b.animT += dt; b.t += dt;
+  b.hitT = Math.max(0, b.hitT - dt);
+  b.flashT = Math.max(0, b.flashT - dt);
+
+  // arena kring extraktionen
+  const L = game.finishX - 24 * TILE, R = game.finishX - 1.5 * TILE;
+
+  if (b.dieT >= 0) { // kollaps
+    b.dieT += dt;
+    b.tilt = Math.min(1.35, b.tilt + dt * 0.8);
+    b.boomT -= dt;
+    if (b.boomT <= 0 && b.dieT < 2.2) {
+      b.boomT = 0.24;
+      killBoom(b.x + (Math.random() - 0.5) * 80, b.y - 20 - Math.random() * 70);
+      game.shake = Math.max(game.shake, 6);
+    }
+    if (b.dieT >= 2.2 && !b.finished) {
+      b.finished = true;
+      for (let i = 0; i < 6; i++) killBoom(b.x + (Math.random() - 0.5) * 120, b.y - Math.random() * 90);
+      game.shake = 16; addKill(1000); SFX.bossdie();
+      game.bossDead = true; game.boss = null;
+    }
+    return;
+  }
+
+  b.facing = p.x > b.x ? 1 : -1;
+  const p2 = bossPhase2(b);
+
+  // kropps-kontakt: gå inte rakt in i kolossen
+  if (b.state !== 'enter' && game.state === 'play' && p.inv <= 0 &&
+      Math.abs(p.x - b.x) < 32 && p.y - 20 > b.y - 100) {
+    hurtPlayer(p, 1, Math.sign(p.x - b.x || 1) * 240);
+  }
+
+  if (b.state === 'enter') {
+    b.x += (R - b.x) * Math.min(1, 1.1 * dt);
+    colossusWalkFx(b, dt);
+    if (b.x - R < 30) { b.state = 'pace'; b.cool = 1.0; }
+  } else if (b.state === 'pace') {
+    // stampa långsamt mot spelaren, klampad i arenan
+    const dir = Math.sign(p.x - b.x) || 1;
+    if (Math.abs(p.x - b.x) > 120) { b.x += dir * (p2 ? 46 : 30) * dt; colossusWalkFx(b, dt); }
+    b.x = Math.max(L, Math.min(R, b.x));
+    b.cool -= dt;
+    if (b.cool <= 0) {
+      const moves = p2 ? ['stomp', 'laser', 'artillery', 'stomp', 'barrage'] : ['stomp', 'laser', 'artillery'];
+      b.state = moves[Math.floor(Math.random() * moves.length)];
+      b.t = 0; b.salvo = 0; b.lift = 0;
+    }
+  } else if (b.state === 'stomp') {
+    // lyft benet (telegraf), slå ner → tryckvåg(or) längs marken
+    if (b.t < 0.45) { b.lift = b.t / 0.45; }
+    else if (!b.slammed) {
+      b.slammed = true; b.lift = 0;
+      game.shake = Math.max(game.shake, 9); SFX.stomp();
+      spawnDust(b.x, b.y, 14);
+      game.shocks.push({ x: b.x - 26, y: b.y, vx: -220, life: 2.0 });
+      game.shocks.push({ x: b.x + 26, y: b.y, vx: 220, life: 2.0 });
+    }
+    if (b.t > 0.9) { b.slammed = false; b.state = 'pace'; b.cool = p2 ? 0.8 : 1.5; }
+  } else if (b.state === 'laser') {
+    // ladda (öga glöder), avfyra horisontell stråle i brösthöjd → DUCKA
+    if (b.t < 0.7) {
+      b.charge = b.t / 0.7;
+      if (Math.random() < 0.4) game.particles.push({ x: b.x + b.facing * 26, y: b.y - 60,
+        vx: -b.facing * 40, vy: (Math.random() - 0.5) * 20, life: 0.25, col: '#ff5a4a', sz: 2, grav: 0 });
+    } else if (!b.beamed) {
+      b.beamed = true; b.charge = 0;
+      SFX.ebeam();
+      game.beam = { x: b.x, dir: b.facing, y: b.y - 34, life: p2 ? 1.05 : 0.85, warm: 0 };
+    }
+    if (b.t > (p2 ? 1.9 : 1.7)) { b.beamed = false; b.state = 'pace'; b.cool = p2 ? 0.9 : 1.6; }
+  } else if (b.state === 'artillery') {
+    // lobba granater i bågar mot spelarens position → spring undan nedslagen
+    const shots = p2 ? 4 : 3;
+    if (b.t > 0.4 && b.salvo < shots && b.t > 0.4 + b.salvo * 0.34) {
+      b.salvo++;
+      b.flashT = 0.1; SFX.rocket();
+      const tx = p.x + (Math.random() - 0.5) * 90;
+      const t = 0.95, vx = (tx - (b.x + b.facing * 20)) / t;
+      game.rockets.push({ x: b.x + b.facing * 20, y: b.y - 78, vx, vy: -300, grav: 620, life: 2.4 });
+    }
+    if (b.t > 0.6 + shots * 0.34 + 0.4) { b.state = 'pace'; b.cool = p2 ? 1.0 : 1.8; }
+  } else if (b.state === 'barrage') { // endast fas 2: bröstkanon-spray
+    if (b.t > 0.4) {
+      b.fireT = (b.fireT || 0) - dt;
+      if (b.fireT <= 0) {
+        b.fireT = 0.11; b.flashT = 0.08;
+        const dx = p.x - b.x, dy = (p.y - 22) - (b.y - 46), d = Math.hypot(dx, dy) || 1;
+        game.ebullets.push({ x: b.x + b.facing * 30, y: b.y - 46,
+          vx: dx / d * 300 + (Math.random() - 0.5) * 44, vy: dy / d * 300 + (Math.random() - 0.5) * 44, life: 2.0 });
+        SFX.eshoot();
+      }
+    }
+    if (b.t > 1.5) { b.state = 'pace'; b.cool = 1.1; }
+  }
+}
+function colossusWalkFx(b, dt) {
+  b.legT += dt;
+  const step = Math.floor(b.legT * 3.2);
+  if (step !== b.lastStep) { b.lastStep = step; game.shake = Math.max(game.shake, 2.5); SFX.stomp(); spawnDust(b.x - b.facing * 18, b.y, 5); }
+}
+
+// tryckvågor längs marken — hoppa över dem
+function updateShocks(dt, p) {
+  for (const s of game.shocks) {
+    s.x += s.vx * dt; s.life -= dt;
+    if (Math.random() < 0.6) game.particles.push({ x: s.x, y: s.y - 2, vx: s.vx * 0.1,
+      vy: -30 - Math.random() * 40, life: 0.3, col: 'rgba(200,180,120,0.7)', sz: 2 + Math.random() * 2, grav: 200 });
+    if (game.state === 'play' && p.inv <= 0 && Math.abs(s.x - p.x) < 20 && p.grounded && Math.abs(p.y - s.y) < 40) {
+      s.life = 0;
+      hurtPlayer(p, 1, Math.sign(s.vx) * 220);
+    }
+  }
+  game.shocks = game.shocks.filter(s => s.life > 0);
+}
+
+// sveplaser — ducka under den
+function updateBeam(dt, p) {
+  const bm = game.beam;
+  if (!bm) return;
+  bm.life -= dt; bm.warm += dt;
+  const reach = 460;
+  const x0 = bm.dir > 0 ? bm.x : bm.x - reach;
+  const x1 = bm.dir > 0 ? bm.x + reach : bm.x;
+  // aktiv skada först efter en kort uppvärmning så den är läsbar
+  if (bm.warm > 0.12 && game.state === 'play' && p.inv <= 0 &&
+      p.x > x0 && p.x < x1 && !p.crouch && (p.y - 30) < bm.y + 8 && (p.y - 4) > bm.y - 8) {
+    hurtPlayer(p, 1, bm.dir * 120);
+  }
+  if (bm.life <= 0) game.beam = null;
+}
+
+// tryckvågs-ripplar längs marken
+function drawShocks() {
+  for (const s of game.shocks) {
+    const a = Math.max(0, Math.min(1, s.life / 2));
+    ctx.strokeStyle = `rgba(230,200,120,${0.3 + 0.5 * a})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(s.x, s.y - 1, 12, Math.PI, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,140,60,${0.4 * a})`;
+    ctx.beginPath(); ctx.arc(s.x, s.y - 1, 7, Math.PI, Math.PI * 2); ctx.stroke();
+  }
+}
+// sveplaser
+function drawBeam() {
+  const bm = game.beam;
+  if (!bm) return;
+  const reach = 460;
+  const x0 = bm.dir > 0 ? bm.x : bm.x - reach;
+  const warming = bm.warm < 0.12;
+  const th = warming ? 2 : 6 + Math.sin(game.time * 40) * 2;
+  ctx.save();
+  ctx.globalAlpha = warming ? 0.55 : 1;
+  ctx.fillStyle = 'rgba(255,70,50,0.35)';
+  ctx.fillRect(x0, bm.y - th, reach, th * 2);
+  ctx.fillStyle = warming ? '#ff7a5a' : '#ffe2d6';
+  ctx.fillRect(x0, bm.y - th / 3, reach, th * 2 / 3);
+  ctx.restore();
+}
+// procedurell mech-boss
+function drawColossus(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  if (b.facing < 0) ctx.scale(-1, 1);      // ritas framåt-höger, flippas vid vänster
+  if (b.tilt) ctx.rotate(b.tilt * 0.45);   // kollaps-lutning kring fötterna
+  const hit = b.hitT > 0;
+  const p2 = bossPhase2(b);
+  const walk = Math.sin(b.legT * 6.4);
+  const steel = hit ? '#8a929c' : '#4a525d';
+  const dark = hit ? '#6b727c' : '#2c313a';
+  const light = hit ? '#aab3bf' : '#6d7883';
+  const warn = '#d9a441';
+  const charging = b.state === 'laser';
+
+  // ben (två) — frambenet lyfts vid stomp
+  function leg(hx, phase, lift) {
+    const foot = -lift, kx = hx + 6 + phase * 4, fx = hx + phase * 8;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = dark; ctx.lineWidth = 13;
+    ctx.beginPath(); ctx.moveTo(hx, -46); ctx.lineTo(kx, -22); ctx.lineTo(fx, foot - 4); ctx.stroke();
+    ctx.strokeStyle = steel; ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(hx, -46); ctx.lineTo(kx, -22); ctx.lineTo(fx, foot - 4); ctx.stroke();
+    ctx.fillStyle = dark; ctx.fillRect(fx - 12, foot - 6, 26, 7);
+    ctx.fillStyle = warn; ctx.fillRect(fx - 12, foot - 6, 26, 2);
+  }
+  leg(-16, -walk, 0);
+  leg(14, walk, b.state === 'stomp' ? b.lift * 30 : 0);
+
+  // höft
+  ctx.fillStyle = steel; ctx.fillRect(-24, -58, 48, 16);
+  ctx.fillStyle = dark; ctx.fillRect(-24, -45, 48, 4);
+  // torso
+  ctx.fillStyle = steel;
+  ctx.beginPath();
+  ctx.moveTo(-26, -58); ctx.lineTo(28, -58); ctx.lineTo(24, -94); ctx.lineTo(-20, -94); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = light; ctx.fillRect(-20, -92, 40, 5);
+  ctx.fillStyle = warn;
+  for (let i = 0; i < 3; i++) ctx.fillRect(-16 + i * 12, -70, 7, 3);
+
+  // lågt bröst-emitter (laser) — pekar framåt
+  ctx.fillStyle = dark; ctx.fillRect(6, -42, 26, 14);
+  ctx.fillStyle = steel; ctx.fillRect(26, -40, 16, 9);
+  ctx.fillStyle = '#1c2026'; ctx.fillRect(40, -38, 5, 5);
+  if (charging) { ctx.fillStyle = `rgba(255,80,60,${0.4 + b.charge * 0.5})`;
+    ctx.beginPath(); ctx.arc(44, -35, 4 + b.charge * 9, 0, 7); ctx.fill(); }
+
+  // bröst-ventil (rage-glöd i fas 2)
+  ctx.fillStyle = p2 ? '#ff6a3c' : '#20343e';
+  ctx.fillRect(-8, -84, 16, 11);
+  if (p2) { ctx.fillStyle = 'rgba(255,120,60,0.35)'; ctx.beginPath(); ctx.arc(0, -78, 12, 0, 7); ctx.fill(); }
+
+  // hög axelkanon (artilleri/barrage)
+  ctx.fillStyle = dark; ctx.fillRect(8, -92, 30, 15);
+  ctx.fillStyle = steel; ctx.fillRect(32, -89, 18, 9);
+  ctx.fillStyle = '#1c2026'; ctx.fillRect(48, -87, 5, 6);
+  if (b.flashT > 0) { ctx.fillStyle = '#fff3b0'; ctx.beginPath(); ctx.arc(54, -84, 8, 0, 7); ctx.fill(); }
+
+  // huvud + öga
+  ctx.fillStyle = dark; ctx.fillRect(-14, -108, 30, 17);
+  const eyeCol = (charging || p2) ? '#ff4535' : '#7dffff';
+  const glow = charging ? b.charge : 0;
+  ctx.fillStyle = eyeCol; ctx.fillRect(-2, -103, 14, 5);
+  ctx.fillStyle = (charging || p2) ? `rgba(255,70,50,${0.35 + glow * 0.5})` : 'rgba(125,255,255,0.4)';
+  ctx.beginPath(); ctx.arc(5, -101, 7 + glow * 8, 0, 7); ctx.fill();
+
+  ctx.restore();
+  // fas 2-rök (i världskoordinater)
+  if (p2 && b.dieT < 0 && Math.random() < 0.3) {
+    game.particles.push({ x: b.x + (Math.random() - 0.5) * 44, y: b.y - 92, vx: (Math.random() - 0.5) * 20,
+      vy: -28 - Math.random() * 30, life: 0.7, col: 'rgba(60,60,64,0.8)', sz: 4, grav: -30 });
+  }
+}
+
 function updateRockets(dt, p) {
   for (const r of game.rockets) {
     r.x += r.vx * dt;
@@ -1530,10 +1793,14 @@ function updateBullets(dt, p) {
       }
     }
     const bo = game.boss;
-    if (bo && bo.dieT < 0 && b.life > 0 && Math.abs(b.x - bo.x) < 68 && Math.abs(b.y - bo.y) < 46) {
-      b.life = 0; bo.hp--; bo.hitT = 0.08;
-      spawnSparks(b.x, b.y, 5, '#ffd25e');
-      if (bo.hp <= 0) { bo.dieT = 0; game.shake = 8; }
+    if (bo && bo.dieT < 0 && b.life > 0) {
+      const bcy = bo.cyOff !== undefined ? bo.y - bo.cyOff : bo.y; // colossus: torso-center
+      const hw = bo.hitW || 68, hh = bo.hitH || 46;
+      if (Math.abs(b.x - bo.x) < hw && Math.abs(b.y - bcy) < hh) {
+        b.life = 0; bo.hp--; bo.hitT = 0.08;
+        spawnSparks(b.x, b.y, 5, '#ffd25e');
+        if (bo.hp <= 0) { bo.dieT = 0; game.shake = 8; }
+      }
     }
     for (const d of game.drones) {
       if (!d.dead && Math.hypot(b.x - d.x, b.y - d.y) < 14 && b.life > 0) {
@@ -1814,8 +2081,13 @@ function render() {
   }
   // robotar
   for (const r of game.robots) drawRobot(r);
+  // mark-shockwaves + sveplaser (bakom bossen)
+  drawShocks();
+  drawBeam();
   // boss
-  if (game.boss && heliSheet.complete && heliSheet.naturalWidth) {
+  if (game.boss && game.boss.kind === 'colossus') {
+    drawColossus(game.boss);
+  } else if (game.boss && heliSheet.complete && heliSheet.naturalWidth) {
     const b = game.boss;
     if (b.hitT > 0) ctx.globalAlpha = 0.65;
     // heli-sheeten är HÖGERVÄND (nosen åt höger) — flippa när bossen
@@ -1988,7 +2260,8 @@ function drawExtraction(x, y) {
     ctx.fillStyle = blink ? 'rgba(255,71,87,0.9)' : 'rgba(255,71,87,0.5)';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText(game.hasHeliBoss ? 'LOCKED — CLEAR THE AIRSPACE' : 'LOCKED — DESTROY THE MECHS', x, y - 40);
+    ctx.fillText(game.hasHeliBoss ? 'LOCKED — CLEAR THE AIRSPACE'
+      : game.hasColossus ? 'LOCKED — DESTROY THE COLOSSUS' : 'LOCKED — DESTROY THE MECHS', x, y - 40);
     return;
   }
   // helikopter som väntar
@@ -2056,9 +2329,11 @@ function drawHUD(p) {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('ENEMY GUNSHIP', W / 2, 45);
+    const bossName = b.kind === 'colossus' ? 'FOUNDRY COLOSSUS' : 'ENEMY GUNSHIP';
+    ctx.fillText(bossName, W / 2, 45);
     if (b.state === 'enter' && Math.sin(game.time * 10) > 0) {
-      bigText('⚠ ENEMY GUNSHIP INBOUND ⚠', 80, 16, '#ff4757', '#800');
+      const warn = b.kind === 'colossus' ? '⚠ FOUNDRY COLOSSUS ONLINE ⚠' : '⚠ ENEMY GUNSHIP INBOUND ⚠';
+      bigText(warn, 80, 16, '#ff4757', '#800');
     }
   }
   // progress
@@ -2243,6 +2518,8 @@ function loop(now) {
     for (const d of game.drones) updateDrone(d, dt, game.player);
     updateBullets(dt, game.player);
     updateRockets(dt, game.player);
+    updateShocks(dt, game.player);
+    updateBeam(dt, game.player);
     updatePickups(dt, game.player);
   } else if (game.state === 'dead') {
     // fritt fall genom världen (Contra-stil), ingen kollision
