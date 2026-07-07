@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v20'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v21'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -203,6 +203,7 @@ canvas.addEventListener('mousedown', e => {
   audio();
   if (game.state !== 'play') {
     const pt = canvasPos(e);
+    if (game.state === 'title' && hitReload(pt)) { window.forceReload && window.forceReload(); return; }
     let idx = defaultStartIdx();
     for (const b of MENU_BTN) if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
     startGame(idx);
@@ -232,6 +233,11 @@ const MENU_BTN = [
   { idx: 0, x: W / 2 - 88, y: 322, w: 150, h: 26, label: '1 ▸ JUNGLE' },
   { idx: 1, x: W / 2 + 88, y: 322, w: 150, h: 26, label: '2 ▸ STEELWORKS' },
 ];
+// reload/uppdatera-knapp (nere till höger på titeln) — för mobil-webapp
+const RELOAD_BTN = { x: W - 60, y: 22, w: 96, h: 22 };
+function hitReload(pt) {
+  return Math.abs(pt.x - RELOAD_BTN.x) < RELOAD_BTN.w / 2 && Math.abs(pt.y - RELOAD_BTN.y) < RELOAD_BTN.h / 2 + 8;
+}
 function updateTouches(e) {
   e.preventDefault();
   touchUI = true;
@@ -264,6 +270,7 @@ function updateTouches(e) {
   if (vbtn.jump && !wasJump) pendingJump = true;
   if (game.state !== 'play' && e.type === 'touchstart' && e.touches.length) {
     const pt = canvasPos(e.touches[0]);
+    if (game.state === 'title' && hitReload(pt)) { window.forceReload && window.forceReload(); return; }
     let idx = defaultStartIdx(); // titel/vinst → sektor 1, död → samma sektor
     for (const b of MENU_BTN) {
       if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
@@ -833,25 +840,30 @@ function updateMecha(r, dt, p) {
   }
   r.facing = p.x > r.x ? 1 : -1;
   const dx = p.x - r.x;
-  const far = Math.abs(dx) > 150;
+  // engagera bara när mechan syns på skärmen och spelaren är i räckhåll
+  const engage = Math.abs(dx) < 340 && onScreen(r.x) && game.state === 'play';
   r.cool -= dt;
   if (r.windup >= 0) {
     r.vx = 0; r.windup += dt;
     if (r.windup >= 0.7) {
       r.windup = -1; r.cool = 1.8 + Math.random(); r.flashT = 0.22;
-      // lobbad granat i båge som når spelaren
+      // lobbad granat i BÅGE — horisontell fart kapad så det aldrig blir en
+      // kula tvärs över planen (annars når den precis inte, du får kliva in)
       const t = 0.95, g = 560;
-      game.rockets.push({ x: r.x + r.facing * 30, y: r.y - 48, vx: (p.x - r.x) / t, vy: -0.5 * g * t, grav: g, life: 2.6 });
+      const vx = Math.max(-320, Math.min(320, (p.x - r.x) / t));
+      game.rockets.push({ x: r.x + r.facing * 30, y: r.y - 48, vx, vy: -0.5 * g * t, grav: g, life: 2.6 });
       SFX.rocket(); game.shake = Math.max(game.shake, 3);
     }
-  } else if (far && game.state === 'play') {
+  } else if (engage && Math.abs(dx) > 150) {
     r.vx = robotCanWalk(r, r.facing) ? r.facing * 40 : 0;
     const step = Math.floor(r.animT * 3.0); // stampljud/skak per fotnedslag
     if (step !== r.lastStep) { r.lastStep = step; if (Math.abs(r.vx) > 5) { game.shake = Math.max(game.shake, 2); SFX.stomp(); } }
     if (r.cool <= 0) r.windup = 0;
-  } else {
+  } else if (engage) {
     r.vx = 0;
     if (r.cool <= 0) r.windup = 0;
+  } else {
+    r.vx = 0; // spelaren utom räckhåll eller osynlig → vänta
   }
   r.vy += GRAV * dt; moveBody(r, dt, true);
 }
@@ -1439,13 +1451,18 @@ function updateDrone(d, dt, p) {
   d.y = d.baseY + Math.sin(d.t * 2.2) * 8;
   const dx = p.x - d.x, dy = p.y - 24 - d.y;
   const dist = Math.hypot(dx, dy);
+  // följ spelaren horisontellt om den är i närheten...
   if (dist < 340 && game.state === 'play') {
     d.x += (dx > 0 ? 1 : -1) * Math.min(26 * dt, Math.abs(dx) * dt);
+  }
+  // ...men skjut bara när drönaren faktiskt syns på skärmen (annars osynlig
+  // skytt som pangar över hela planen)
+  if (dist < 250 && onScreen(d.x) && game.state === 'play') {
     d.cool -= dt;
     if (d.cool <= 0) {
       d.cool = 1.7 + Math.random() * 0.5;
       const s = 300 / Math.max(dist, 1);
-      game.ebullets.push({ x: d.x, y: d.y + 6, vx: dx * s, vy: dy * s, life: 1.8 });
+      game.ebullets.push({ x: d.x, y: d.y + 6, vx: dx * s, vy: dy * s, life: 1.1 });
       SFX.eshoot();
     }
   }
@@ -1868,7 +1885,7 @@ function render() {
 
   ctx.restore();
 
-  drawHUD(p);
+  if (game.state === 'play') drawHUD(p); // ingen HUD bakom titel/döds/vinst-skärm
   // "GET TO THE CHOPPA!" när luftrummet säkrats
   if (game.choppaT > 0 && game.state === 'play') {
     const a = Math.min(1, game.choppaT);
@@ -2062,6 +2079,16 @@ function drawTitle() {
   ctx.font = 'bold 9px monospace';
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.fillText('BUILD ' + BUILD, W - 8, H - 8);
+  // reload / uppdatera-knapp (nere till höger uppe): glöder om ny version finns
+  const upd = window.__updateReady;
+  const rb = RELOAD_BTN, rpulse = 0.7 + Math.sin(game.time * 6) * 0.3;
+  ctx.fillStyle = upd ? `rgba(94,255,122,${0.2 + rpulse * 0.2})` : 'rgba(255,255,255,0.10)';
+  ctx.fillRect(rb.x - rb.w / 2, rb.y - rb.h / 2, rb.w, rb.h);
+  ctx.strokeStyle = upd ? '#5eff7a' : 'rgba(255,255,255,0.4)'; ctx.lineWidth = 2;
+  ctx.strokeRect(rb.x - rb.w / 2, rb.y - rb.h / 2, rb.w, rb.h);
+  ctx.fillStyle = upd ? '#5eff7a' : '#c8d0e0';
+  ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(upd ? '⟳ UPDATE!' : '⟳ RELOAD', rb.x, rb.y + 4);
   if (ready(pMove)) {
     const fi = PM.RUN[Math.floor(game.time * 12) % 6];
     ctx.save(); ctx.translate(W / 2, 235); ctx.scale(1.6, 1.6);

@@ -47,9 +47,35 @@
 <div id="wrap"><canvas id="game" width="640" height="360"></canvas></div>
 <script src="game.js"></script>
 <script>
+  // Service worker + uppdaterings-detektering (för mobil-webapp som inte kan
+  // hård-ladda om). window.__updateReady sätts när en ny version installerats.
+  window.__updateReady = false;
   if ('serviceWorker' in navigator) {
-    addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').then(reg => {
+        window.__swReg = reg;
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            // ny version klar OCH en gammal styr redan sidan = uppdatering finns
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              window.__updateReady = true;
+            }
+          });
+        });
+        // kolla efter ny version direkt vid start
+        reg.update().catch(() => {});
+      }).catch(() => {});
+    });
   }
+  // tvinga senaste versionen: nolla cacherna och ladda om
+  window.forceReload = function () {
+    const done = () => location.reload();
+    if (window.caches && caches.keys) {
+      caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(done, done);
+    } else done();
+  };
 </script>
 </body>
 </html>
