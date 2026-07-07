@@ -6,6 +6,13 @@ webbserver (t.ex. `python3 -m http.server`) och spela.
 
 ![Spritesheet](assets/player-move.png)
 
+## Banval
+
+Titelskärmen har **banval**: tryck `1` (Jungle) eller `2` (Steelworks), klicka
+en sektor-knapp, eller tryck `Enter` för Sektor 1. Dör du startar `R`/`Enter`
+om **samma sektor** (inte alltid Sektor 1), så du slipper spela om bana 1 för
+att testa bana 2.
+
 ## Kontroller
 
 | Handling                  | Tangent                          |

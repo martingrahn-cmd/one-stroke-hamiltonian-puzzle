@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v16'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v17'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -94,7 +94,7 @@ const LEVEL2_MAP = [
 '                                                            ======                                            ======                                                            ',
 '       M                                        CCCC                M                           CCCCCCCC                      M                                                 ',
 '                                                CCCC        BBBBBB                              CCCCCCCC      BBBBBB                                                            ',
-'   P      W      W    * SSSS  *   W             CCCCW     W BBBBBB    W             W         W CCCCCCCC    W BBBBBB  SS*S  W                         W       X     * * X    F  ',
+'   P          *         SSSS  *   W             CCCCW     W BBBBBB    W             W         W CCCCCCCC    W BBBBBB  SS*S  W                         W       X     * * X    F  ',
 '############################################     #########################     ###############################################################     #############################',
 '############################################SSSSS#########################SSSSS###############################################################SSSSS#############################',
 '################################################################################################################################################################################',
@@ -180,9 +180,15 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   audio();
   if (!e.repeat && e.code === 'Space') pendingJump = true;
-  if (game.state !== 'play' && (e.code === 'Enter' || e.code === 'Space' || e.code === 'KeyR')) startGame();
-  if (game.state === 'play' && e.code === 'KeyR') startGame();
+  // banval på meny/döds/vinst-skärm: siffertangent hoppar direkt till sektorn
+  if (game.state !== 'play') {
+    if (e.code === 'Digit1' || e.code === 'Numpad1') startGame(0);
+    else if (e.code === 'Digit2' || e.code === 'Numpad2') startGame(1);
+    else if (['Enter', 'Space', 'KeyR'].includes(e.code)) startGame(defaultStartIdx());
+  } else if (e.code === 'KeyR') startGame(game.level); // starta om nuvarande sektor
 });
+// döds-skärm → försök igen på samma sektor; titel/vinst → sektor 1
+function defaultStartIdx() { return game.state === 'dead' ? game.level : 0; }
 addEventListener('keyup', e => { keys[e.code] = false; });
 // OBS: pil-upp är numera SIKTE (snett upp), inte hopp — Contra-schema
 const inLeft  = () => keys['ArrowLeft'] || keys['KeyA'] || stick.active && stick.vx < -0.35;
@@ -193,7 +199,15 @@ const inUp    = () => keys['ArrowUp'] || keys['KeyW'] || keys['KeyI'] || stick.a
 const inJump  = () => keys['Space'] || vbtn.jump;
 const inFire  = () => keys['KeyJ'] || keys['KeyX'] || keys['ControlLeft'] || vbtn.fire || mouseFire;
 let mouseFire = false;
-canvas.addEventListener('mousedown', () => { audio(); if (game.state !== 'play') startGame(); else mouseFire = true; });
+canvas.addEventListener('mousedown', e => {
+  audio();
+  if (game.state !== 'play') {
+    const pt = canvasPos(e);
+    let idx = defaultStartIdx();
+    for (const b of MENU_BTN) if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
+    startGame(idx);
+  } else mouseFire = true;
+});
 addEventListener('mouseup', () => { mouseFire = false; });
 
 function canvasPos(t) {
@@ -213,6 +227,11 @@ const TB = [
   { id: 'fire', x: W - 54,  y: H - 58, r: 36, label: '✹' },
 ];
 const STICK_R = 34; // max utslag i canvas-pixlar
+// banval-knappar på titelskärmen
+const MENU_BTN = [
+  { idx: 0, x: W / 2 - 88, y: 322, w: 150, h: 26, label: '1 ▸ JUNGLE' },
+  { idx: 1, x: W / 2 + 88, y: 322, w: 150, h: 26, label: '2 ▸ STEELWORKS' },
+];
 function updateTouches(e) {
   e.preventDefault();
   touchUI = true;
@@ -243,7 +262,14 @@ function updateTouches(e) {
     stick.active = false; stick.id = -1; stick.vx = stick.vy = 0;
   }
   if (vbtn.jump && !wasJump) pendingJump = true;
-  if (game.state !== 'play' && e.touches.length) startGame();
+  if (game.state !== 'play' && e.type === 'touchstart' && e.touches.length) {
+    const pt = canvasPos(e.touches[0]);
+    let idx = defaultStartIdx(); // titel/vinst → sektor 1, död → samma sektor
+    for (const b of MENU_BTN) {
+      if (Math.abs(pt.x - b.x) < b.w / 2 && Math.abs(pt.y - b.y) < b.h / 2 + 8) idx = b.idx;
+    }
+    startGame(idx);
+  }
 }
 canvas.addEventListener('touchstart', updateTouches, { passive: false });
 canvas.addEventListener('touchmove', updateTouches, { passive: false });
@@ -541,13 +567,14 @@ function addKill(points) {
 
 // ---- Speltillstånd ----------------------------------------------------------
 const game = {};
-function startGame() {
+function startGame(idx) {
+  idx = Math.max(0, Math.min(LEVELS.length - 1, idx | 0));
   if (touchUI) goFullscreen();
   game.score = 0;
   game.kills = 0;
   game.lastQuip = -1;
   game.hpCarry = 5;
-  loadLevel(0);
+  loadLevel(idx);
   game.state = 'play';
 }
 
@@ -1940,8 +1967,8 @@ function drawHUD(p) {
     }
   }
 
-  // nivåbanner vid start
-  if (game.levelBanner > 0) {
+  // nivåbanner vid start (endast under spel — inte bakom titelskärmen)
+  if (game.levelBanner > 0 && game.state === 'play') {
     const a = Math.min(1, game.levelBanner);
     ctx.save(); ctx.globalAlpha = a;
     bigText(LEVELS[game.level].name, 150, 22, game.theme === 'foundry' ? '#7dffff' : '#ffd25e', '#000');
@@ -1987,10 +2014,22 @@ function drawTitle() {
   } else {
     bigText('A/D MOVE · W/↑ AIM UP · S CROUCH · SPACE JUMP (x2 = FLIP!) · J/X/MOUSE FIRE', 285, 11, '#dfe6ff');
   }
-  const b = Math.sin(game.time * 5) > -0.2;
-  if (b) bigText(touchUI ? 'TAP TO ENGAGE' : 'PRESS ENTER TO ENGAGE', 320, 15, '#5eff7a');
+  // banval-knappar
+  bigText('SELECT SECTOR', 305, 10, '#9aa7c7');
+  const pulse = Math.sin(game.time * 5) > -0.2;
+  for (const bt of MENU_BTN) {
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillRect(bt.x - bt.w / 2, bt.y - bt.h / 2, bt.w, bt.h);
+    ctx.strokeStyle = bt.idx === 1 ? 'rgba(125,255,255,0.7)' : 'rgba(94,255,122,0.7)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bt.x - bt.w / 2, bt.y - bt.h / 2, bt.w, bt.h);
+    ctx.fillStyle = pulse ? '#fff' : '#c8d0e0';
+    ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+    ctx.fillText(bt.label, bt.x, bt.y + 4);
+  }
+  bigText(touchUI ? 'TAP A SECTOR TO ENGAGE' : 'PRESS 1 OR 2 (OR ENTER)', 352, 9, '#9aa7c7');
   if (IS_IOS && !isStandalone()) {
-    bigText('Tip: Share → "Add to Home Screen" = fullscreen, no Safari UI', 345, 10, '#9aa7c7');
+    bigText('Tip: Share → "Add to Home Screen" = fullscreen, no Safari UI', 340, 9, '#7a8398');
   }
   if (innerHeight > innerWidth) {
     bigText('↻ ROTATE TO LANDSCAPE, SOLDIER', 60, 14, '#ffd25e', '#ff8c42');
@@ -2001,7 +2040,10 @@ function drawDead() {
   bigText("YOU'RE HISTORY", 150, 36, '#ff4757', '#800');
   bigText('EVEN LEGENDS RELOAD.', 178, 12, '#ffb0a0');
   bigText('SCORE ' + game.score + '  ·  ' + game.kills + ' HOSTILES DOWN', 205, 14, '#fff');
-  if (Math.sin(game.time * 5) > -0.2) bigText('PRESS ENTER/R — GET BACK IN THERE', 230, 14, '#ffd25e');
+  if (Math.sin(game.time * 5) > -0.2) {
+    bigText('ENTER/R — RETRY ' + LEVELS[game.level].name.split(':')[0], 232, 13, '#ffd25e');
+  }
+  bigText('1 = JUNGLE   ·   2 = STEELWORKS', 260, 10, '#9aa7c7');
 }
 function drawWin() {
   panel(0.5);
@@ -2021,7 +2063,7 @@ function drawWin() {
   bigText('MISSION ACCOMPLISHED. LET OFF SOME STEAM.', 175, 11, '#ffd25e');
   bigText('SCORE ' + game.score, 220, 22, '#ffd25e');
   bigText('HOSTILES NEUTRALIZED: ' + game.kills + '   TIME: ' + game.time.toFixed(1) + 's', 250, 13, '#fff');
-  if (Math.sin(game.time * 5) > -0.2) bigText('PRESS ENTER/R FOR ONE MORE ROUND', 300, 13, '#5eff7a');
+  if (Math.sin(game.time * 5) > -0.2) bigText('ENTER/R — PLAY AGAIN   ·   1 / 2 SECTOR SELECT', 300, 12, '#5eff7a');
 }
 function drawTouchUI() {
   // knappar (hopp + eld)
