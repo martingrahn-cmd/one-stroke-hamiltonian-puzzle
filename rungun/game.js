@@ -10,7 +10,7 @@ const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
 const W = 640, H = 360;
-const BUILD = 'v22'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
+const BUILD = 'v23'; // visas på titelskärmen — bumpa ihop med sw.js-cachen
 const TILE = 32;
 
 // ---- Sprite frames ---------------------------------------------------------
@@ -883,13 +883,13 @@ function sentryFrame(r) {
   return 8 + Math.floor(r.animT * 4) % 5; // idle/scan (cyan öga)
 }
 const TURRET_READY = () => turretSheet.complete && turretSheet.naturalWidth;
-// Floor Turret-frames i robot-turret.png (6 kol): deploy 0-5, aktiv 6-8,
-// eld 9-11, död 12-17
+// Floor Turret-frames i robot-turret.png (5 kol × 3 rad = 15 frames):
+// deploy 0-4, aktiv/idle 5-6, eld m. mynningsflamma 7-9, destruktion 10-14
 function turretFrame(r) {
-  if (r.hp <= 0) return 12 + Math.min(5, Math.floor(r.dieT * 7)); // dödssekvens ~7fps
-  if (r.flashT > 0) return 9 + Math.floor(r.animT * 18) % 3;      // eld m. mynningsflamma
-  if (r.deploy > 0.92) return 6 + Math.floor(r.animT * 3) % 2;    // aktiv/aim
-  return Math.min(5, Math.floor(r.deploy * 6));                   // deploy/retract
+  if (r.hp <= 0) return 10 + Math.min(4, Math.floor(r.dieT * 7)); // dödssekvens ~7fps
+  if (r.flashT > 0) return 7 + Math.floor(r.animT * 18) % 3;      // eld m. mynningsflamma
+  if (r.deploy > 0.92) return 5 + Math.floor(r.animT * 3) % 2;    // aktiv/aim
+  return Math.min(4, Math.floor(r.deploy * 5));                   // deploy/retract
 }
 function drawRobot(r) {
   if (r.kind === 'sentry' && SENTRY_READY()) {
@@ -906,8 +906,8 @@ function drawRobot(r) {
     if (r.hp <= 0 && r.dieT > 0.9) return;
     ctx.save();
     if (r.hitT > 0) ctx.globalAlpha = 0.6;
-    // turret-sheeten är HÖGERVÄND — flippa vid facing < 0
-    drawFrame(turretSheet, turretFrame(r), r.x, r.y + 2, r.facing < 0, 64, 64, 6);
+    // turret-sheeten är HÖGERVÄND — flippa vid facing < 0 (64×80, 5 kol)
+    drawFrame(turretSheet, turretFrame(r), r.x, r.y + 6, r.facing < 0, 64, 80, 5);
     ctx.restore();
     ctx.globalAlpha = 1;
     return;

@@ -123,6 +123,8 @@ delar ihopvuxna blobbar och paketerar om allt till en jämn 8×3-sheet
   sikte 6–8, eld 9–10, gång 12–14, död 15–17; vänstervänd — eldframesen
   var högervända i källbilden och är flippade vid extraktion)
 - `assets/robot-sentry.png` — Sektor 2-patrullrobot (8×4-frames)
-- `assets/robot-turret.png` — Sektor 2-golvturret (Floor Turret, 6×3, 64×64-frames:
-  deploy 0–5, aktiv/aim 6–8, eld m. mynningsflamma 9–11, destruktion 12–17)
+- `assets/robot-turret.png` — Sektor 2-golvturret (Floor Turret, 5×3, 64×80-frames:
+  deploy 0–4, aktiv/aim 5–6, eld m. mynningsflamma 7–9, destruktion 10–14).
+  Källbilden har 5 poser/rad (inte 6) och mjuk-maskas + antialiasas vid extraktion
+  så framesen inte ser inklippta ut eller lämnar fyrkantiga kanter vid explosionen.
 - `tools/extract_sprites.py` — sprite-extraktion från originalbilderna
